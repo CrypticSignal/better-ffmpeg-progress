@@ -3,35 +3,34 @@ import subprocess
 from ffmpeg import probe
 
 
-def run_ffmpeg_show_progress(filepath, command):
+def run_ffmpeg_show_progress(command):
     """
     This function runs an FFmpeg command and prints the following info in addition to the FFmpeg output:
         - Percentage Progress
         - Speed
         - ETA (minutes and seconds)
-    e.g.:
+    Example:
     Progress: 25% | Speed: 22.3x | ETA: 1m 33s
-
-    Arguments:
-    - The path of the file you wish to convert.
-    - The command you wish to run, e.g.:
-        ffmpeg -i input.mp4 -c:a libmp3lame output.mp3
+    How to use:
+    run_ffmpeg_show_progress("ffmpeg -i input.mp4 -c:a libmp3lame output.mp3")
     """
+
+    command = command.split(" ")
+    index_of_filepath = command.index("-i") + 1
+    filepath = command[index_of_filepath]
 
     can_get_duration = False
 
     try:
         file_duration = float(probe(filepath)["format"]["duration"])
     except Exception:
-        print(f"\nUnable to get the duration of {filepath}\n")
+        print(f"\nUnable to get the duration of {filepath}:\n")
     else:
         can_get_duration = True
         print("\nUnable to get the duration of the input file. FFmpeg progress information will not be shown.\n")
 
-    command = command.split(" ")
-
     process = subprocess.Popen(
-        command +[ "-progress", "-", "-nostats"],
+        command + [ "-progress", "-", "-nostats"],
         stdout=subprocess.PIPE
     )
 
@@ -64,6 +63,6 @@ def run_ffmpeg_show_progress(filepath, command):
                         eta_string = f'{minutes}m {seconds}s'
                     finally:
                         print(f"Progress: {percentage}% | Speed: {speed}x | ETA: {eta_string}", end="\r")
-            
+         
 # Example:                 
-# run_ffmpeg_show_progress("aqp60.mkv", "ffmpeg -i aqp60.mkv -c:a libmp3lame output.mp3")
+# run_ffmpeg_show_progress("ffmpeg -i aqp60.mkv -c:a libmp3lame output.mp3")
