@@ -11,4 +11,4 @@ The function takes the following arguments:
 - The command you wish to run, e.g. `ffmpeg -i input.mp4 -c:a libmp3lame output.mp3`
 
 # Usage
-`run_ffmpeg_show_progress("input.mp4", "ffmpeg -i input.mkv -c:a libmp3lame output.mp3")`
+`run_ffmpeg_show_progress("input.mp4", "ffmpeg -i input.mp4 -c:a libmp3lame output.mp3")`
