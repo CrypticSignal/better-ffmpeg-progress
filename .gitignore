@@ -1,0 +1,20 @@
+# Video Files
+*.3gp
+*.avi
+*.flv
+*.m4v
+*.mkv
+*.mp4
+*.MTS
+*.wmv
+# Audio Files
+*.mp3
+*.wav
+*.w64
+*.aac
+*.m4a
+*.flac
+*.aiff
+*.caf
+*.ogg
+*.opus
