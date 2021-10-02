@@ -1,1 +1,1 @@
-from better_ffmpeg_progress import run_ffmpeg_show_progress
+from .better_ffmpeg_progress import run_ffmpeg_show_progress
