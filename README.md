@@ -12,8 +12,8 @@ Example: `Progress: 25% | Speed: 22.3x | ETA: 1m 33s`
 
 **Usage:**
 
-Simply import the `run_ffmpeg_show_progress` function and supply an FFmpeg command as an argument.
+Simply import the `run_ffmpeg_show_progress` function and supply a list of arguments like you would to `subprocess.run()`
 ```py
 from better_ffmpeg_progress import run_ffmpeg_show_progress
-run_ffmpeg_show_progress("ffmpeg -i input.mkv -c:v libx264 -c:a copy output.mp4")
+run_ffmpeg_show_progress(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
 ```
