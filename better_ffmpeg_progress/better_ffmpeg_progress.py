@@ -13,10 +13,9 @@ def run_ffmpeg_show_progress(command):
     Example:
     Progress: 25% | Speed: 22.3x | ETA: 1m 33s
     How to use:
-    run_ffmpeg_show_progress("ffmpeg -i input.mp4 -c:a libmp3lame output.mp3")
+    run_ffmpeg_show_progress(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
     """
 
-    command = command.split(" ")
     index_of_filepath = command.index("-i") + 1
     filepath = command[index_of_filepath]
 
