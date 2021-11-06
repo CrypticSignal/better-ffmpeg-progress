@@ -17,3 +17,8 @@ Simply import the `run_ffmpeg_show_progress` function and supply a list of argum
 from better_ffmpeg_progress import run_ffmpeg_show_progress
 run_ffmpeg_show_progress(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
 ```
+An optional `ffmpeg_loglevel` argument can be supplied, to set the value of FFmpeg's `-loglevel` option. Here's an example:
+
+```
+run_ffmpeg_show_progress(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"], ffmpeg_loglevel="warning")
+```
