@@ -36,7 +36,7 @@ The `run` method takes the following optional arguments:
     def handle_progress_info(percentage, speed, eta):
         print(f"The FFmpeg process is {percentage}% complete. ETA is {eta} seconds based on the current speed ({speed}).)
     ```
-    Then you simple set the value of the `progress_handler` argument to the name of your function, like so:
+    Then you simply set the value of the `progress_handler` argument to the name of your function, like so:
     ```py
     process.run(progress_handler=handle_progress_info)
     ```
