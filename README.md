@@ -27,7 +27,7 @@ Create an instance of the `FfmpegProcess` class and supply a list of arguments l
 from better_ffmpeg_progress import FfmpegProcess
 # Pass a list of FFmpeg arguments, like you would if using subprocess.run()
 process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
-# Use the run method to run the FFmpeg command. The progress information will be printed in the terminal.
+# Use the run method to run the FFmpeg command.
 process.run()
 ```
 
