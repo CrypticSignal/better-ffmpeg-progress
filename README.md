@@ -1,4 +1,4 @@
-# Better FFmpeg Progress
+# Better FFmpeg Progress [![Downloads](https://static.pepy.tech/personalized-badge/better-ffmpeg-progress?period=total&units=none&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pepy.tech/project/better-ffmpeg-progress)
 
 Runs an FFmpeg command and uses [tqdm](https://github.com/tqdm/tqdm) to show a progress bar. Here's an example:
 
