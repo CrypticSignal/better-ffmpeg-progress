@@ -94,6 +94,7 @@ class FfmpegProcess:
             sys.exit(0)
 
         except Exception as e:
-            print(e)
             progress_bar.close()
             process.kill()
+            print(f"[Error] {e}\nExiting Better FFmpeg Progress.")
+            sys.exit(0)
