@@ -31,15 +31,6 @@ class FfmpegProcess:
             self._ffmpeg_args += ["-progress", "pipe:1", "-nostats"]
 
     def run(self, progress_handler=None, ffmpeg_output_file=None):
-        """
-        Runs FFmpeg and prints the following:
-            - Percentage Progress
-            - Speed
-            - ETA (minutes and seconds)
-        Example:
-        Progress: 25% | Speed: 22.3x | ETA: 1m 33s
-        """
-
         if ffmpeg_output_file is None:
             os.makedirs("ffmpeg_output", exist_ok=True)
             ffmpeg_output_file = os.path.join("ffmpeg_output", f"[{Path(self._filepath).name}].txt")
@@ -53,7 +44,7 @@ class FfmpegProcess:
         if self._can_get_duration:
 
             with open(ffmpeg_output_file, "a") as f:
-                self._process = subprocess.Popen(
+                process = subprocess.Popen(
                     self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f
                 )
 
@@ -61,12 +52,16 @@ class FfmpegProcess:
             progress_bar.clear()
             previous_seconds_processed = 0
         else:
-            self._process = subprocess.Popen(self._ffmpeg_args)
+            process = subprocess.Popen(self._ffmpeg_args)
+
+        percentage = None
+        speed = None
+        eta = None
 
         try:
-            while self._process.poll() is None:
+            while process.poll() is None:
                 if self._can_get_duration:
-                    ffmpeg_output = self._process.stdout.readline().decode()
+                    ffmpeg_output = process.stdout.readline().decode()
                     # A progress handler was not specified. Use tqdm to show a progress bar.
                     if progress_handler is None:
                         if "out_time_ms" in ffmpeg_output:
@@ -78,24 +73,27 @@ class FfmpegProcess:
                     else:
                         if "out_time_ms" in ffmpeg_output:
                             seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
-                            percentage = round((seconds_processed / self._duration_secs) * 100, 1)
+                            if int(seconds_processed) > 0:
+                                percentage = (seconds_processed / self._duration_secs) * 100
+                        
+                        elif "speed" in ffmpeg_output:
+                            speed = ffmpeg_output.split("=")[1].strip()[:-1]
+                            if speed != "0" and "N/A" not in speed:
+                                speed = float(speed)
+                                eta = (self._duration_secs - seconds_processed) / speed
 
-                        if "speed" in ffmpeg_output:
-                            speed = ffmpeg_output.split("=")[1].strip()
-                            if " " in speed or "N/A" in speed:
-                                speed = None
-                            else:
-                                speed = float(speed[:-1])
-
-                            if speed:
-                                eta = (file_duration - secs) / speed
-                                progress_handler(percentage, f"{speed}x", eta)
+                        progress_handler(percentage, speed, eta)    
 
             progress_bar.close()
             print(f"Done! Check out /{ffmpeg_output_file} to see the FFmpeg output.")
 
         except KeyboardInterrupt:
             progress_bar.close()
-            self._process.kill()
+            process.kill()
             print("[KeyboardInterrupt] FFmpeg process killed. Exiting Better FFmpeg Progress.")
             sys.exit(0)
+
+        except Exception as e:
+            print(e)
+            progress_bar.close()
+            process.kill()
