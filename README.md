@@ -36,17 +36,20 @@ The `run` method takes the following **optional** arguments:
 - `progress_handler`
 
   - You can create a function if you want to retrieve the percentage progress, speed and ETA rather to do something specific with the aforementioned metrics.
-    The function will receive:
+    The function will receive the following, updated about two times per second:
 
     - Percentage progress (float)
     - Speed (string), e.g. `22.3x`
     - ETA in seconds (float)
+    - Estimated output filesize in bytes (float).
+      - _Note: This is not accurate. Please take the value with a grain of salt._
 
     Here's an example of a progress handler that you can create:
 
     ```py
-    def handle_progress_info(percentage, speed, eta):
-        print(f"The FFmpeg process is {percentage}% complete. ETA is {eta} seconds based on the current speed ({speed}).)
+    def handle_progress_info(percentage, speed, eta, estimated_filesize):
+        print(f"The FFmpeg process is {percentage}% complete. ETA is {eta} seconds based on the current speed ({speed}).")
+        print(f"Estimated Output Filesize: {estimated_filesize / 1_000_000} MB")
     ```
 
     Then you simply set the value of the `progress_handler` argument to the name of your function, like so:
