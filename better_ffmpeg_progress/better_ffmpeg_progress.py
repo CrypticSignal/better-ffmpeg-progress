@@ -54,10 +54,6 @@ class FfmpegProcess:
         else:
             process = subprocess.Popen(self._ffmpeg_args)
 
-        percentage = None
-        speed = None
-        eta = None
-
         try:
             while process.poll() is None:
                 if self._can_get_duration:
@@ -71,19 +67,22 @@ class FfmpegProcess:
                             previous_seconds_processed = seconds_processed
                     # A progress handler was specified.
                     else:
-                        if "out_time_ms" in ffmpeg_output:
+                        if "total_size" in ffmpeg_output:
+                            # e.g. FFmpeg total_size=1310720 
+                            total_size = int(ffmpeg_output.split("=")[1])
+                            
+                        elif "out_time_ms" in ffmpeg_output:
                             seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
-                            if int(seconds_processed) > 0:
-                                percentage = (seconds_processed / self._duration_secs) * 100
-                        
+                            percentage = (seconds_processed / self._duration_secs) * 100
+                            estimated_size = total_size * (100 / percentage)
+
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
                             if speed != "0" and "N/A" not in speed:
                                 speed = float(speed)
                                 eta = (self._duration_secs - seconds_processed) / speed
-
-                        progress_handler(percentage, speed, eta)    
-
+                                progress_handler(percentage, speed, eta, estimated_size)    
+                    
             progress_bar.close()
             print(f"Done! Check out /{ffmpeg_output_file} to see the FFmpeg output.")
 
@@ -91,10 +90,10 @@ class FfmpegProcess:
             progress_bar.close()
             process.kill()
             print("[KeyboardInterrupt] FFmpeg process killed. Exiting Better FFmpeg Progress.")
-            sys.exit(0)
+            sys.exit()
 
         except Exception as e:
             progress_bar.close()
             process.kill()
             print(f"[Error] {e}\nExiting Better FFmpeg Progress.")
-            sys.exit(0)
+            sys.exit()
