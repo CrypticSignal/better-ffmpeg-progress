@@ -13,9 +13,16 @@ class FfmpegProcess:
         Creates the list of FFmpeg arguments.
         Accepts an optional ffmpeg_loglevel parameter to set the value of FFmpeg's -loglevel argument.
         """
-        self._command = command
-        index_of_filepath = self._command.index("-i") + 1
-        self._filepath = self._command[index_of_filepath]
+        index_of_filepath = command.index("-i") + 1
+        self._filepath = command[index_of_filepath]
+        self._output_filepath = command[-1]
+
+        dirname = os.path.dirname(self._output_filepath)
+
+        if dirname != "":
+            self._dir_files = [file for file in os.listdir(dirname)]
+        else:
+            self._dir_files = [file for file in os.listdir()]
 
         self._can_get_duration = True
 
@@ -24,7 +31,7 @@ class FfmpegProcess:
         except Exception:
             self._can_get_duration = False
 
-        self._ffmpeg_args = self._command + ["-loglevel", ffmpeg_loglevel]
+        self._ffmpeg_args = command + ["-loglevel", ffmpeg_loglevel]
 
         if self._can_get_duration:
             # pipe:1 sends the progress to stdout. See https://stackoverflow.com/a/54386052/13231825
@@ -38,11 +45,16 @@ class FfmpegProcess:
         with open(ffmpeg_output_file, "w") as f:
             pass
 
+        if "-y" not in self._ffmpeg_args and self._output_filepath in self._dir_files:
+            choice = input(f"{self._output_filepath} already exists. Overwrite? [Y/N]: ").lower()
+            if choice != "y":
+                print("File will not be overwritten. Exiting Better FFmpeg Process.")
+                sys.exit()
+
+        self._ffmpeg_args += ["-y"]
         print(f"Running: {' '.join(self._ffmpeg_args)}")
-        popen_args = [self._ffmpeg_args]
 
         if self._can_get_duration:
-
             with open(ffmpeg_output_file, "a") as f:
                 process = subprocess.Popen(
                     self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f
@@ -84,7 +96,7 @@ class FfmpegProcess:
                                 progress_handler(percentage, speed, eta, estimated_size)    
                     
             progress_bar.close()
-            print(f"Done! Check out /{ffmpeg_output_file} to see the FFmpeg output.")
+            print(f"Done! Check out {ffmpeg_output_file} to see the FFmpeg output.")
 
         except KeyboardInterrupt:
             progress_bar.close()
@@ -97,3 +109,4 @@ class FfmpegProcess:
             process.kill()
             print(f"[Error] {e}\nExiting Better FFmpeg Progress.")
             sys.exit()
+            
