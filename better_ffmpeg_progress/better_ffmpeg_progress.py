@@ -65,6 +65,8 @@ class FfmpegProcess:
             previous_seconds_processed = 0
         else:
             process = subprocess.Popen(self._ffmpeg_args)
+            
+        total_size = 0    
 
         try:
             while process.poll() is None:
@@ -83,13 +85,11 @@ class FfmpegProcess:
                             # e.g. FFmpeg total_size=1310720 
                             if 'N/A' not in ffmpeg_output.split("=")[1]:
                                 total_size = int(ffmpeg_output.split("=")[1])
-                            else:
-                                total_size = 0
                             
                         elif "out_time_ms" in ffmpeg_output:
                             seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
                             percentage = (seconds_processed / self._duration_secs) * 100
-                            estimated_size = total_size * (100 / percentage)
+                            estimated_size = total_size * (100 / percentage) if total_size else None
 
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
