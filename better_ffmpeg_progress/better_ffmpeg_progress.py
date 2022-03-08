@@ -81,7 +81,10 @@ class FfmpegProcess:
                     else:
                         if "total_size" in ffmpeg_output:
                             # e.g. FFmpeg total_size=1310720 
-                            total_size = int(ffmpeg_output.split("=")[1])
+                            if 'N/A' not in ffmpeg_output.split("=")[1]:
+                                total_size = int(ffmpeg_output.split("=")[1])
+                            else:
+                                total_size = 0
                             
                         elif "out_time_ms" in ffmpeg_output:
                             seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
@@ -90,7 +93,7 @@ class FfmpegProcess:
 
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
-                            if speed != "0" and "N/A" and "N/A\n" not in speed:
+                            if speed != "0" and "N/A" not in speed:
                                 speed = float(speed)
                                 eta = (self._duration_secs - seconds_processed) / speed
                                 progress_handler(percentage, speed, eta, estimated_size)    
