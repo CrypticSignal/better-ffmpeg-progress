@@ -14,8 +14,8 @@ class FfmpegProcess:
         Accepts an optional ffmpeg_loglevel parameter to set the value of FFmpeg's -loglevel argument.
         """
         index_of_filepath = command.index("-i") + 1
-        self._filepath = command[index_of_filepath]
-        self._output_filepath = command[-1]
+        self._filepath = str(command[index_of_filepath])
+        self._output_filepath = str(command[-1])
 
         dirname = os.path.dirname(self._output_filepath)
 
@@ -65,6 +65,8 @@ class FfmpegProcess:
             previous_seconds_processed = 0
         else:
             process = subprocess.Popen(self._ffmpeg_args)
+            
+        total_size = 0    
 
         try:
             while process.poll() is None:
@@ -81,12 +83,13 @@ class FfmpegProcess:
                     else:
                         if "total_size" in ffmpeg_output:
                             # e.g. FFmpeg total_size=1310720 
-                            total_size = int(ffmpeg_output.split("=")[1])
+                            if 'N/A' not in ffmpeg_output.split("=")[1]:
+                                total_size = int(ffmpeg_output.split("=")[1])
                             
                         elif "out_time_ms" in ffmpeg_output:
                             seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
                             percentage = (seconds_processed / self._duration_secs) * 100
-                            estimated_size = total_size * (100 / percentage)
+                            estimated_size = total_size * (100 / percentage) if total_size else None
 
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
