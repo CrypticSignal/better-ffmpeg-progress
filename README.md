@@ -1,6 +1,16 @@
-# Better FFmpeg Progress [![Downloads](https://static.pepy.tech/personalized-badge/better-ffmpeg-progress?period=total&units=none&left_color=black&right_color=orange&left_text=PyPI%20downloads)](https://pepy.tech/project/better-ffmpeg-progress)
+<div align="center">
 
-Runs an FFmpeg command and uses [tqdm](https://github.com/tqdm/tqdm) to show a progress bar. Here's an example:
+[![PyPI downloads](https://img.shields.io/pypi/dm/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/pypistats)
+[![PyPI downloads](https://img.shields.io/pypi/dw/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/pypistats)
+[![GitHub](https://img.shields.io/github/license/crypticsignal/better-ffmpeg-progress?label=License&color=blue)](LICENSE.txt)
+
+# Better FFmpeg Progress
+
+Runs an FFmpeg command and uses [tqdm](https://github.com/tqdm/tqdm) to show a progress bar.
+
+</div>
+
+## Example
 
 ```
 39%|███████████████████████████████████████████ | 23.581/60.226 [00:19<00:34, 1.07s/s]
@@ -15,11 +25,11 @@ Where:
 - `00:34` is the estimated time required for the FFmpeg process to complete.
 - `1.07` shows how many seconds of the input file are processed per second.
 
-**Installation:**
+## Installation
 
 `pip3 install better-ffmpeg-progress --upgrade`
 
-**Usage:**
+## Usage
 
 Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()`:
 
