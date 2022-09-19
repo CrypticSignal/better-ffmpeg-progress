@@ -37,13 +37,10 @@ class FfmpegProcess:
             # pipe:1 sends the progress to stdout. See https://stackoverflow.com/a/54386052/13231825
             self._ffmpeg_args += ["-progress", "pipe:1", "-nostats"]
 
-    def run(self, progress_handler=None, ffmpeg_output_file=None):
+    def run(self, progress_handler=None, ffmpeg_output_file=None, process_complete_handler=None):
         if ffmpeg_output_file is None:
             os.makedirs("ffmpeg_output", exist_ok=True)
             ffmpeg_output_file = os.path.join("ffmpeg_output", f"[{Path(self._filepath).name}].txt")
-
-        with open(ffmpeg_output_file, "w") as f:
-            pass
 
         if "-y" not in self._ffmpeg_args and self._output_filepath in self._dir_files:
             choice = input(f"{self._output_filepath} already exists. Overwrite? [Y/N]: ").lower()
@@ -51,7 +48,7 @@ class FfmpegProcess:
                 print("File will not be overwritten. Exiting Better FFmpeg Process.")
                 sys.exit()
 
-        self._ffmpeg_args += ["-y"]
+        self._ffmpeg_args.insert(1, "-y")
         print(f"Running: {' '.join(self._ffmpeg_args)}")
 
         if self._can_get_duration:
@@ -60,7 +57,9 @@ class FfmpegProcess:
                     self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f
                 )
 
-            progress_bar = tqdm(total=self._duration_secs, unit="s", dynamic_ncols=True)
+            # Add 0.001 to prevent the possibility of the following warning:
+            # TqdmWarning: clamping frac to range [0, 1]
+            progress_bar = tqdm(total=self._duration_secs + 0.001, unit="s", dynamic_ncols=True)
             progress_bar.clear()
             previous_seconds_processed = 0
         else:
@@ -96,10 +95,14 @@ class FfmpegProcess:
                             if speed != "0" and "N/A" not in speed:
                                 speed = float(speed)
                                 eta = (self._duration_secs - seconds_processed) / speed
-                                progress_handler(percentage, speed, eta, estimated_size)    
-                    
+                                progress_handler(percentage, speed, eta, estimated_size)   
+
             progress_bar.close()
-            print(f"Done! Check out {ffmpeg_output_file} to see the FFmpeg output.")
+
+            if process_complete_handler:
+                process_complete_handler()  
+
+            print(f"To see FFmpeg's output, check out {ffmpeg_output_file}")
 
         except KeyboardInterrupt:
             progress_bar.close()
