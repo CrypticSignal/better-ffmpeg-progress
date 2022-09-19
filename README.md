@@ -10,7 +10,7 @@ Runs an FFmpeg command and uses [tqdm](https://github.com/tqdm/tqdm) to show a p
 
 </div>
 
-## Example
+## Example:
 
 ```
 39%|███████████████████████████████████████████ | 23.581/60.226 [00:19<00:34, 1.07s/s]
@@ -25,11 +25,11 @@ Where:
 - `00:34` is the estimated time required for the FFmpeg process to complete.
 - `1.07` shows how many seconds of the input file are processed per second.
 
-## Installation
+## Installation:
 
 `pip3 install better-ffmpeg-progress --upgrade`
 
-## Usage
+## Usage:
 
 Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()`:
 
@@ -78,3 +78,10 @@ Here's an example where both the `progress_handler` and `ffmpeg_output_file` par
 ```py
 process.run(progress_handler=handle_progress_info, ffmpeg_output_file="ffmpeg_log.txt")
 ```
+## Changelog:
+[19th September 2022]
+- Add the ability to specify `process_complete_handler`, a function to run when the FFmpeg process is complete. E.g.
+  ```py
+  process.run(progress_handler=None, ffmpeg_output_file=None, process_complete_handler=my_function)
+  ```
+- Add 0.001 to tqdm's `total` parameter to prevent the chance of getting `TqdmWarning: clamping frac to range [0, 1]`
