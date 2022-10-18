@@ -28,10 +28,11 @@ class FfmpegProcess:
 
         try:
             self._duration_secs = float(probe(self._filepath)["format"]["duration"])
+            print(f"The duration of {self._filepath} has been detected as {self._duration_secs} seconds.")
         except Exception:
             self._can_get_duration = False
 
-        self._ffmpeg_args = command + ["-loglevel", ffmpeg_loglevel]
+        self._ffmpeg_args = command + ["-hide_banner", "-loglevel", ffmpeg_loglevel]
 
         if self._can_get_duration:
             # pipe:1 sends the progress to stdout. See https://stackoverflow.com/a/54386052/13231825
@@ -64,8 +65,12 @@ class FfmpegProcess:
             previous_seconds_processed = 0
         else:
             process = subprocess.Popen(self._ffmpeg_args)
-            
-        total_size = 0    
+        
+        percentage_progress = None
+        speed = None
+        total_size = None  
+        eta = None
+        process_complete_handler = None
 
         try:
             while process.poll() is None:
@@ -87,22 +92,23 @@ class FfmpegProcess:
                             
                         elif "out_time_ms" in ffmpeg_output:
                             seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
-                            percentage = (seconds_processed / self._duration_secs) * 100
-                            estimated_size = total_size * (100 / percentage) if total_size else None
+                            if self._can_get_duration:
+                                percentage_progress = (seconds_processed / self._duration_secs) * 100
+                                estimated_size = total_size * (100 / percentage_progress) if total_size else None
 
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
                             if speed != "0" and "N/A" not in speed:
                                 speed = float(speed)
-                                eta = (self._duration_secs - seconds_processed) / speed
-                                progress_handler(percentage, speed, eta, estimated_size)   
+                                if self._can_get_duration:
+                                    eta = (self._duration_secs - seconds_processed) / speed
 
-            progress_bar.close()
+                        progress_handler(percentage_progress, speed, eta, estimated_size)
 
-            if process_complete_handler:
-                process_complete_handler()  
-
-            print(f"To see FFmpeg's output, check out {ffmpeg_output_file}")
+            if process.returncode == 0 and process_complete_handler:
+                progress_bar.close()
+                process_complete_handler()
+                print(f"To see FFmpeg's output, check out {ffmpeg_output_file}")
 
         except KeyboardInterrupt:
             progress_bar.close()
