@@ -50,27 +50,17 @@ class FfmpegProcess:
                 sys.exit()
 
         self._ffmpeg_args.insert(1, "-y")
-        print(f"Running: {' '.join(self._ffmpeg_args)}")
+
+        with open(ffmpeg_output_file, "a") as f:
+            process = subprocess.Popen(
+                self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f
+            )
+            print(f"Running: {' '.join(self._ffmpeg_args)}")
 
         if self._can_get_duration:
-            with open(ffmpeg_output_file, "a") as f:
-                process = subprocess.Popen(
-                    self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f
-                )
-
-            # Add 0.001 to prevent the possibility of the following warning:
-            # TqdmWarning: clamping frac to range [0, 1]
-            progress_bar = tqdm(total=self._duration_secs + 0.001, unit="s", dynamic_ncols=True)
+            progress_bar = tqdm(total=round(self._duration_secs, 1), unit="s", dynamic_ncols=True, leave=False)
             progress_bar.clear()
             previous_seconds_processed = 0
-        else:
-            process = subprocess.Popen(self._ffmpeg_args)
-        
-        percentage_progress = None
-        speed = None
-        total_size = None  
-        eta = None
-        process_complete_handler = None
 
         try:
             while process.poll() is None:
@@ -79,12 +69,18 @@ class FfmpegProcess:
                     # A progress handler was not specified. Use tqdm to show a progress bar.
                     if progress_handler is None:
                         if "out_time_ms" in ffmpeg_output:
-                            seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
+                            seconds_processed = round(int(ffmpeg_output.strip()[12:]) / 1_000_000, 1)
                             seconds_increase = seconds_processed - previous_seconds_processed
                             progress_bar.update(seconds_increase)
                             previous_seconds_processed = seconds_processed
                     # A progress handler was specified.
                     else:
+                        percentage_progress = None
+                        speed = None
+                        total_size = None  
+                        eta = None
+                        estimated_size = None
+
                         if "total_size" in ffmpeg_output:
                             # e.g. FFmpeg total_size=1310720 
                             if 'N/A' not in ffmpeg_output.split("=")[1]:
@@ -105,10 +101,14 @@ class FfmpegProcess:
 
                         progress_handler(percentage_progress, speed, eta, estimated_size)
 
+            if process.returncode != 0:
+                print(f"The FFmpeg process encountered an error. The output of FFmpeg can be found in {ffmpeg_output_file}")
+                sys.exit()
+
             if process.returncode == 0 and process_complete_handler:
                 progress_bar.close()
                 process_complete_handler()
-                print(f"To see FFmpeg's output, check out {ffmpeg_output_file}")
+                print(f"Done! To see FFmpeg's output, check out {ffmpeg_output_file}")
 
         except KeyboardInterrupt:
             progress_bar.close()
