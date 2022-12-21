@@ -13,14 +13,14 @@ Runs an FFmpeg command and uses [tqdm](https://github.com/tqdm/tqdm) to show a p
 ## Example:
 
 ```
-39%|███████████████████████████████████████████ | 23.581/60.226 [00:19<00:34, 1.07s/s]
+39%|███████████████████████████████████████████ | 23.6/60.2 [00:19<00:34, 1.07s/s]
 ```
 
 Where:
 
 - `39%` is the percentage progress.
-- `23.581` seconds of the input file have been processed.
-- `60.226` is the duration of the input file in seconds.
+- `23.6` seconds of the input file have been processed.
+- `60.2` is the duration of the input file in seconds.
 - `00:19` is the time elapsed since the FFmpeg process started.
 - `00:34` is the estimated time required for the FFmpeg process to complete.
 - `1.07` shows how many seconds of the input file are processed per second.
@@ -78,10 +78,18 @@ Here's an example where both the `progress_handler` and `ffmpeg_output_file` par
 ```py
 process.run(progress_handler=handle_progress_info, ffmpeg_output_file="ffmpeg_log.txt")
 ```
+
 ## Changelog:
-[19th September 2022]
+
+[19/09/2022]
+
 - Add the ability to specify `process_complete_handler`, a function to run when the FFmpeg process is complete. E.g.
   ```py
   process.run(progress_handler=None, ffmpeg_output_file=None, process_complete_handler=my_function)
   ```
 - Add 0.001 to tqdm's `total` parameter to prevent the chance of getting `TqdmWarning: clamping frac to range [0, 1]`
+
+[21/12/2022]
+
+- Fix `'estimated_size' referenced before assignment` error.
+- The progress bar now uses 1 decimal place for seconds processed and total duration.
