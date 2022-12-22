@@ -31,7 +31,9 @@ Where:
 
 ## Usage:
 
-Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()`:
+Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()`.
+
+Simple Example:
 
 ```py
 from better_ffmpeg_progress import FfmpegProcess
@@ -39,6 +41,31 @@ from better_ffmpeg_progress import FfmpegProcess
 process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
 # Use the run method to run the FFmpeg command.
 process.run()
+```
+
+Advanced Example:
+
+```py
+from better_ffmpeg_progress import FfmpegProcess
+
+def handle_progress_info(percentage, speed, eta, estimated_filesize):
+    print(f"Estimated Output Filesize: {estimated_filesize / 1_000_000} MB")
+
+def handle_success():
+  # Code to run if the FFmpeg process completes successfully.
+  pass
+
+def handle_error():
+  # Code to run if the FFmpeg process encounters an error.
+  pass
+
+# Pass a list of FFmpeg arguments, like you would if using subprocess.run()
+process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
+
+ffmpeg_output_path = 'ffmpeg_output.txt'
+
+# Use the run method to run the FFmpeg command.
+process.run(progress_handler=handle_progress_info, ffmpeg_output_file=ffmpeg_output_path, success_handler=handle_success, error_handler=handle_error)
 ```
 
 The `run` method takes the following **optional** arguments:
@@ -55,41 +82,21 @@ The `run` method takes the following **optional** arguments:
 
     The function will receive the aforementioned metrics as arguments, about two times per second.
 
-    Here's an example of a progress handler that you can create:
+- `ffmpeg_output_file` - A string path to define where you want the output of FFmpeg to be saved. By default, this is saved in a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`.
 
-    ```py
-    def handle_progress_info(percentage, speed, eta, estimated_filesize):
-        print(f"The FFmpeg process is {percentage}% complete. ETA is {eta} seconds.")
-        print(f"Estimated Output Filesize: {estimated_filesize / 1_000_000} MB")
-    ```
+- `success_handler` - A function to run if the FFmpeg process completes successfully.
 
-    Then you simply set the value of the `progress_handler` argument to the name of your function, like so:
-
-    ```py
-    process.run(progress_handler=handle_progress_info)
-    ```
-
-- `ffmpeg_output_file`
-
-  - The `ffmpeg_output_file` argument allows you define where you want the output of FFmpeg to be saved. By default, this is saved in a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`, but you can change this using the `ffmpeg_output_file` argument.
-
-Here's an example where both the `progress_handler` and `ffmpeg_output_file` parameters are used:
-
-```py
-process.run(progress_handler=handle_progress_info, ffmpeg_output_file="ffmpeg_log.txt")
-```
+- `error_handler` - A function to run if the FFmpeg process encounters an error.
 
 ## Changelog:
 
 [19/09/2022]
 
-- Add the ability to specify `process_complete_handler`, a function to run when the FFmpeg process is complete. E.g.
-  ```py
-  process.run(progress_handler=None, ffmpeg_output_file=None, process_complete_handler=my_function)
-  ```
+- Add the ability to specify a `success_handler` argument, a function to run if the FFmpeg process completes successfully.
 - Add 0.001 to tqdm's `total` parameter to prevent the chance of getting `TqdmWarning: clamping frac to range [0, 1]`
 
 [21/12/2022]
 
-- Fix `'estimated_size' referenced before assignment` error.
-- The progress bar now uses 1 decimal place for seconds processed and total duration.
+- [v2.0.7] Fix `'estimated_size' referenced before assignment` error.
+- [v2.0.7] The progress bar now uses 1 decimal place for seconds processed and total duration.
+- [v2.0.8] Add the ability to specify an `error_handler` argument, a function to run if the FFmpeg process encounters an error.
