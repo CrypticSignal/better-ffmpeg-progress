@@ -99,4 +99,8 @@ The `run` method takes the following **optional** arguments:
 
 - [v2.0.7] Fix `'estimated_size' referenced before assignment` error.
 - [v2.0.7] The progress bar now uses 1 decimal place for seconds processed and total duration.
+
+[22/12/2022]
+
 - [v2.0.8] Add the ability to specify an `error_handler` argument, a function to run if the FFmpeg process encounters an error.
+- [v2.0.9] Fix a typo in the `error_handler` function.
