@@ -38,7 +38,7 @@ class FfmpegProcess:
             # pipe:1 sends the progress to stdout. See https://stackoverflow.com/a/54386052/13231825
             self._ffmpeg_args += ["-progress", "pipe:1", "-nostats"]
 
-    def run(self, progress_handler=None, ffmpeg_output_file=None, success_handler=None, error_hander=None):
+    def run(self, progress_handler=None, ffmpeg_output_file=None, success_handler=None, error_handler=None):
         if ffmpeg_output_file is None:
             os.makedirs("ffmpeg_output", exist_ok=True)
             ffmpeg_output_file = os.path.join("ffmpeg_output", f"[{Path(self._filepath).name}].txt")
@@ -103,8 +103,8 @@ class FfmpegProcess:
 
             if process.returncode != 0:
                 print(f"The FFmpeg process encountered an error. The output of FFmpeg can be found in {ffmpeg_output_file}")
-                if error_hander:
-                    error_hander()
+                if error_handler:
+                    error_handler()
                 sys.exit()
 
             if process.returncode == 0:
