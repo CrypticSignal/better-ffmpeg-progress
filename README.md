@@ -103,4 +103,4 @@ The `run` method takes the following **optional** arguments:
 [22/12/2022]
 
 - [v2.0.8] Add the ability to specify an `error_handler` argument, a function to run if the FFmpeg process encounters an error.
-- [v2.0.9] Fix a typo in the `error_handler` function.
+- [v2.0.9] Fix a typo (commit [da45a84](https://github.com/CrypticSignal/better-ffmpeg-progress/commit/da45a8416856ab7d3c7b748db5703fa3dbc65f60))
