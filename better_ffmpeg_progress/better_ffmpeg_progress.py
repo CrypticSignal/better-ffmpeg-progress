@@ -111,7 +111,7 @@ class FfmpegProcess:
                 progress_bar.close()
                 print(f"Done! To see FFmpeg's output, check out {ffmpeg_output_file}")
                 if success_handler:
-                    process_complete_handler()
+                    success_handler()
 
         except KeyboardInterrupt:
             progress_bar.close()
