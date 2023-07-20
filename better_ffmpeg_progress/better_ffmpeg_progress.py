@@ -95,9 +95,12 @@ class FfmpegProcess:
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
                             if speed != "0" and "N/A" not in speed:
-                                speed = float(speed)
-                                if self._can_get_duration:
-                                    eta = (self._duration_secs - seconds_processed) / speed
+                                try:
+                                    speed = float(speed)
+                                    if self._can_get_duration:
+                                        eta = (self._duration_secs - seconds_processed) / speed
+                                except ValueError:
+                                    speed = None
 
                         progress_handler(percentage_progress, speed, eta, estimated_size)
 
