@@ -95,6 +95,7 @@ class FfmpegProcess:
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
                             if speed != "0" and "N/A" not in speed:
+                                print('attempting to parse speeed....')
                                 try:
                                     speed = float(speed)
                                     if self._can_get_duration:
