@@ -87,10 +87,11 @@ class FfmpegProcess:
                                 total_size = int(ffmpeg_output.split("=")[1])
                             
                         elif "out_time_ms" in ffmpeg_output:
-                            seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
-                            if self._can_get_duration:
-                                percentage_progress = (seconds_processed / self._duration_secs) * 100
-                                estimated_size = total_size * (100 / percentage_progress) if total_size else None
+                            if 'N/A' not in int(ffmpeg_output.strip()[12:]):
+                                seconds_processed = int(ffmpeg_output.strip()[12:]) / 1_000_000
+                                if self._can_get_duration:
+                                    percentage_progress = (seconds_processed / self._duration_secs) * 100
+                                    estimated_size = total_size * (100 / percentage_progress) if total_size else None
 
                         elif "speed" in ffmpeg_output:
                             speed = ffmpeg_output.split("=")[1].strip()[:-1]
