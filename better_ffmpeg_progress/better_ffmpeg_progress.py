@@ -68,7 +68,7 @@ class FfmpegProcess:
                     ffmpeg_output = process.stdout.readline().decode()
                     # A progress handler was not specified. Use tqdm to show a progress bar.
                     if progress_handler is None:
-                        if "out_time_ms" in ffmpeg_output:
+                        if "out_time_ms" in ffmpeg_output and 'N/A' not in int(ffmpeg_output.strip()[12:]):
                             seconds_processed = round(int(ffmpeg_output.strip()[12:]) / 1_000_000, 1)
                             seconds_increase = seconds_processed - previous_seconds_processed
                             progress_bar.update(seconds_increase)
