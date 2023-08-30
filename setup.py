@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setuptools.setup(
     name="better-ffmpeg-progress",
-    version="2.1.0",
+    version="2.1.1",
     author="GitHub.com/CrypticSignal",
     author_email="theaudiophile@outlook.com",
     description="Run FFmpeg & see percentage progress + ETA.",
@@ -20,5 +20,5 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-    ]
+    ],
 )
