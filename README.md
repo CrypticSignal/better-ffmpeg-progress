@@ -80,7 +80,7 @@ The `run` method takes the following **optional** arguments:
     - Estimated output filesize in bytes. [float]
       - _Note: This is not accurate. Please take the value with a grain of salt._
 
-    The function will receive the aforementioned metrics as arguments, about two times per second.
+    The values will be `None` if unknown. The function will receive the aforementioned metrics as arguments, about two times per second.
 
 - `ffmpeg_output_file` - A string path to define where you want the output of FFmpeg to be saved. By default, this is saved in a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`.
 
@@ -108,4 +108,3 @@ The `run` method takes the following **optional** arguments:
 [07/02/2022]
 
 - [v2.1.0] [Update function name](https://github.com/CrypticSignal/better-ffmpeg-progress/commit/572fe8a0d71957d00b833134a4d35170630203fa) to fix `'process_complete_handler' is not defined` error.
-
