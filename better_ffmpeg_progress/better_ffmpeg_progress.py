@@ -52,7 +52,7 @@ class FfmpegProcess:
         if self._can_get_duration:
             self._ffmpeg_args += ["-progress", "pipe:1", "-nostats"]
 
-    def _check_if_overwrite(self):
+    def _should_overwrite(self):
         dirname = os.path.dirname(self._output_filepath)
         self._dir_files = (
             [file for file in os.listdir(dirname)] if dirname else [file for file in os.listdir()]
@@ -62,10 +62,13 @@ class FfmpegProcess:
             choice = input(f"{self._output_filepath} already exists. Overwrite? [Y/N]: ").lower()
 
             if choice != "y":
-                print("Exiting Better FFmpeg Process.")
-                sys.exit()
+                print(
+                    "FFmpeg will not run as the output filename already exists, and you do not want it to be overwritten."
+                )
+                return False
 
             self._ffmpeg_args.insert(1, "-y")
+            return True
 
     def _update_progress(self, ffmpeg_output, progress_handler):
         if ffmpeg_output:
@@ -121,7 +124,8 @@ class FfmpegProcess:
         success_handler=None,
         error_handler=None,
     ):
-        self._check_if_overwrite()
+        if not self._should_overwrite():
+            return
 
         if ffmpeg_output_file is None:
             os.makedirs("ffmpeg_output", exist_ok=True)
@@ -157,12 +161,11 @@ class FfmpegProcess:
                 success_handler()
 
             print(f"\n\nDone! To see FFmpeg's output, check out {ffmpeg_output_file}")
-            sys.exit()
 
         except KeyboardInterrupt:
-            print("[KeyboardInterrupt] FFmpeg process killed. Exiting Better FFmpeg Progress.")
+            self._progress_bar.close()
+            print("[KeyboardInterrupt] FFmpeg process killed.")
             sys.exit()
 
         except Exception as e:
-            print(f"[Error] {e}\nExiting Better FFmpeg Progress.")
-            sys.exit()
+            print(f"[Better FFmpeg Process] {e}")
