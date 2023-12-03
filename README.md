@@ -31,13 +31,22 @@ Where:
 
 ## Usage:
 
-Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()`.
-
 Simple Example:
+
+Call `ffmpeg_process` method and supply string or a list of arguments.
+
+```py
+from better_ffmpeg_progress import ffmpeg_process
+# Pass a list of FFmpeg arguments, and run directly.
+ffmpeg_process(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
+ffmpeg_process("ffmpeg -i input.mp4 -c:a libmp3lame output.mp3")
+```
+
+Create an instance of the `FfmpegProcess` class and supply string or a list of arguments like you would to `subprocess.run()`.
 
 ```py
 from better_ffmpeg_progress import FfmpegProcess
-# Pass a list of FFmpeg arguments, like you would if using subprocess.run()
+# Pass a list of FFmpeg arguments, like you would if using subprocess.run().
 process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
 # Use the run method to run the FFmpeg command.
 process.run()
@@ -60,13 +69,23 @@ def handle_error():
   pass
 
 # Pass a list of FFmpeg arguments, like you would if using subprocess.run()
-process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
+process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"], hide_tips=True)
 
 ffmpeg_output_path = 'ffmpeg_output.txt'
 
 # Use the run method to run the FFmpeg command.
 process.run(progress_handler=handle_progress_info, ffmpeg_output_file=ffmpeg_output_path, success_handler=handle_success, error_handler=handle_error)
 ```
+
+The `FfmpegProcess` class takes the following **optional** arguments:
+
+- `ffmpeg_loglevel`
+
+  - Desired FFmpeg log level. Default is "verbose". [str]
+
+- `hide_tips`
+
+  - Hide tips from `FfmpegProcess`. [bool]
 
 The `run` method takes the following **optional** arguments:
 
@@ -75,14 +94,14 @@ The `run` method takes the following **optional** arguments:
   - You can create a function if you would like to do something with the following values:
 
     - Percentage progress. [float]
-    - Speed, e.g. `22.3x` which means that 22.3 seconds of the input are processed every second. [string]
+    - Speed, e.g. `22.3` which means that 22.3 seconds of the input are processed every second. [float]
     - ETA in seconds. [float]
     - Estimated output filesize in bytes. [float]
       - _Note: This is not accurate. Please take the value with a grain of salt._
 
     The values will be `None` if unknown. The function will receive the aforementioned metrics as arguments, about two times per second.
 
-- `ffmpeg_output_file` - A string path to define where you want the output of FFmpeg to be saved. By default, this is saved in a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`.
+- `ffmpeg_output_file` - A string path to define where you want the output of FFmpeg to be saved. By default, this is saved in your temp dir with a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`.
 
 - `success_handler` - A function to run if the FFmpeg process completes successfully.
 
