@@ -17,22 +17,31 @@ class FfmpegProcess:
         ValueError: If the list of arguments does not include "-i".
     """
 
-    def __init__(self, commands: list[str], ffmpeg_loglevel="verbose"):
+    def __init__(self, commands: list[str], ffmpeg_loglevel="verbose", hide_tips=False):
+        self.print: Callable[..., None] = (
+            (lambda *msg, **kw: None) if hide_tips else print  # type:ignore
+        )
+
         if "-i" not in commands:
             raise ValueError("FFmpeg command must include '-i'")
 
-        self._ffmpeg_args = commands + ["-hide_banner", "-loglevel", ffmpeg_loglevel]
+        if "-hide_banner" not in commands:
+            commands.append("-hide_banner")
+        if "-loglevel" not in commands:
+            commands.extend(["-loglevel", ffmpeg_loglevel])
+
+        self._ffmpeg_args = commands
         self._output_filepath = commands[-1]
 
         self._set_file_info()
 
         self._estimated_size: Optional[float] = None
         self._eta: Optional[float] = None
-        self._percentage_progress = 0
-        self._progress_bar = None
-        self._seconds_processed = 0
-        self._speed = 0
-        self._current_size = 0
+        self._percentage_progress = 0.0
+        self._progress_bar: Optional[tqdm] = None
+        self._seconds_processed = 0.0
+        self._speed = 0.0
+        self._current_size = 0.0
 
     def _set_file_info(self):
         index_of_filepath = self._ffmpeg_args.index("-i") + 1
@@ -56,7 +65,7 @@ class FfmpegProcess:
                     capture_output=True,
                 ).stdout
             )
-            print(
+            self.print(
                 f"The duration of {self._filepath} has been detected as {self._duration_secs} seconds."
             )
         except Exception:
@@ -70,7 +79,7 @@ class FfmpegProcess:
             choice = input(f"{self._output_filepath} already exists. Overwrite? [Y/N]: ")
 
             if choice.lower() != "y":
-                print(
+                self.print(
                     "FFmpeg will not run as the output filename already exists, and you do not want it to be overwritten."
                 )
                 return False
@@ -78,7 +87,13 @@ class FfmpegProcess:
             self._ffmpeg_args.insert(1, "-y")
         return True
 
-    def _update_progress(self, ffmpeg_output: str, progress_handler: Optional[Callable]):
+    def _update_progress(
+        self,
+        ffmpeg_output: str,
+        progress_handler: Optional[
+            Callable[[float, float, Optional[float], Optional[float]], None]
+        ],
+    ):
         if not ffmpeg_output:
             return
         value = ffmpeg_output.split("=")[1].strip()
@@ -87,14 +102,14 @@ class FfmpegProcess:
             if "out_time_ms" in ffmpeg_output:
                 seconds_processed = round(int(value) / 1_000_000, 1)
                 if self._progress_bar:
-                    self._progress_bar.update(seconds_processed - self._progress_bar.n)
+                    self._progress_bar.update(int(seconds_processed - self._progress_bar.n))
             return
 
         if "total_size" in ffmpeg_output and "N/A" not in value:
-            self._current_size = int(value)
+            self._current_size = float(value)
 
         elif "out_time_ms" in ffmpeg_output:
-            self._seconds_processed = int(value) / 1_000_000
+            self._seconds_processed = float(value) / 1_000_000
 
             if self._can_get_duration:
                 self._percentage_progress = (self._seconds_processed / self._duration_secs) * 100
@@ -119,7 +134,9 @@ class FfmpegProcess:
 
     def run(
         self,
-        progress_handler: Optional[Callable] = None,
+        progress_handler: Optional[
+            Callable[[float, float, Optional[float], Optional[float]], None]
+        ] = None,
         ffmpeg_output_file: Optional[str | Path] = None,
         success_handler: Optional[Callable] = None,
         error_handler: Optional[Callable] = None,
@@ -128,17 +145,17 @@ class FfmpegProcess:
             return
 
         if ffmpeg_output_file is None:
-            ffmpeg_path = Path("./ffmpeg_output")
-            ffmpeg_path.mkdir(exist_ok=True)
-            ffmpeg_output_file = ffmpeg_path / f"{Path(self._filepath).name}.txt"
+            ffmpeg_output_path = Path("./ffmpeg_output")
+            ffmpeg_output_path.mkdir(exist_ok=True)
+            ffmpeg_output_file = ffmpeg_output_path / f"{Path(self._filepath).name}.txt"
 
         with open(ffmpeg_output_file, "a") as f:
             process = subprocess.Popen(self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f)
-            print(f"\nRunning: {' '.join(self._ffmpeg_args)}\n")
+            self.print(f"\nRunning: {' '.join(self._ffmpeg_args)}\n")
 
         if progress_handler is None and self._can_get_duration:
             self._progress_bar = tqdm(
-                total=round(self._duration_secs, 1),
+                total=int(self._duration_secs),
                 unit="s",
                 dynamic_ncols=True,
                 leave=False,
@@ -156,12 +173,12 @@ class FfmpegProcess:
                     error_handler()
                     return
 
-                print(
-                    f"The FFmpeg process encountered an error. The output of FFmpeg can be found in {ffmpeg_output_file}"
+                self.print(
+                    f"\nThe FFmpeg process encountered an error. The output of FFmpeg can be found in {ffmpeg_output_file}"
                 )
 
             if self._progress_bar:
-                self._progress_bar.update(self._duration_secs - self._progress_bar.n)
+                self._progress_bar.update(int(self._duration_secs - self._progress_bar.n))
 
             if success_handler:
                 success_handler()
@@ -171,8 +188,9 @@ class FfmpegProcess:
         except KeyboardInterrupt:
             if self._progress_bar:
                 self._progress_bar.close()
-            print("[KeyboardInterrupt] FFmpeg process killed.")
+            process.terminate()
+            self.print("[KeyboardInterrupt] FFmpeg process killed.")
             sys.exit()
 
         except Exception as e:
-            print(f"[Better FFmpeg Process] {e}")
+            self.print(f"[Better FFmpeg Process] {e}")
