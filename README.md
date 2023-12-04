@@ -27,7 +27,7 @@ Where:
 
 ## Installation:
 
-`pip3 install better-ffmpeg-progress --upgrade`
+`pip install better-ffmpeg-progress --upgrade`
 
 ## Usage:
 
@@ -81,7 +81,7 @@ The `FfmpegProcess` class takes the following **optional** arguments:
 
 - `ffmpeg_loglevel`
 
-  - Desired FFmpeg log level. Default is "verbose". [str]
+  - Desired FFmpeg log level. if user not supply, default is "verbose". [str]
 
 - `hide_tips`
 
@@ -106,6 +106,13 @@ The `run` method takes the following **optional** arguments:
 - `success_handler` - A function to run if the FFmpeg process completes successfully.
 
 - `error_handler` - A function to run if the FFmpeg process encounters an error.
+
+## Test:
+
+```
+pip install tox
+tox -q 
+```
 
 ## Changelog:
 

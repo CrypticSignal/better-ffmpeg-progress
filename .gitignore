@@ -1,6 +1,7 @@
 *.txt
 .DS_Store
 .vscode
+.tox
 better_ffmpeg_progress.egg-info
 build/
 dist/

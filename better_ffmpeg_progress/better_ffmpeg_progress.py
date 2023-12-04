@@ -20,7 +20,7 @@ class FfmpegProcess:
         ValueError: If the list of arguments does not include "-i".
     """
 
-    def __init__(self, commands: str | list[str], ffmpeg_loglevel="verbose", hide_tips=False):
+    def __init__(self, commands: "str | list[str]", ffmpeg_loglevel="verbose", hide_tips=False):
         self.print: Callable[..., None] = (
             (lambda *msg, **kw: None) if hide_tips else print  # type:ignore
         )
@@ -113,10 +113,22 @@ class FfmpegProcess:
                     self._progress_bar.update(int(seconds_processed - self._progress_bar.n))
             return
 
-        if "total_size" in ffmpeg_output and "N/A" not in value:
+        # handle while `progress=continue` or `progress=end`
+        if ffmpeg_output.startswith("progress="):
+            if ffmpeg_output == "progress=end":
+                self._percentage_progress = 100
+                self._eta = 0
+                if self._progress_bar:
+                    self._progress_bar.update(int(self._duration_secs - self._progress_bar.n))
+
+            progress_handler(
+                self._percentage_progress, self._speed, self._eta, self._estimated_size
+            )
+
+        elif ffmpeg_output.startswith("total_size") and "N/A" not in value:
             self._current_size = float(value)
 
-        elif "out_time_ms" in ffmpeg_output:
+        elif ffmpeg_output.startswith("out_time_ms"):
             self._seconds_processed = float(value) / 1_000_000
 
             if self._can_get_duration:
@@ -125,7 +137,7 @@ class FfmpegProcess:
                 if self._current_size is not None and self._percentage_progress != 0.0:
                     self._estimated_size = self._current_size * (100 / self._percentage_progress)
 
-        elif "speed" in ffmpeg_output:
+        elif ffmpeg_output.startswith("speed"):
             speed_str = value.rstrip("x")  # rstrip `22.3x` to `22.3`, and preserve `N/A`
 
             if speed_str != "0" and "N/A" not in speed_str:
@@ -134,24 +146,12 @@ class FfmpegProcess:
                 if self._can_get_duration:
                     self._eta = (self._duration_secs - self._seconds_processed) / self._speed
 
-        if ffmpeg_output == "progress=end":
-            self._percentage_progress = 100
-            self._eta = 0
-            if self._progress_bar:
-                self._progress_bar.update(int(self._duration_secs - self._progress_bar.n))
-
-        # handle while `progress=continue` or `progress=end`
-        if ffmpeg_output.startswith("progress="):
-            progress_handler(
-                self._percentage_progress, self._speed, self._eta, self._estimated_size
-            )
-
     def run(
         self,
         progress_handler: Optional[
             Callable[[float, float, Optional[float], Optional[float]], None]
         ] = None,
-        ffmpeg_output_file: Optional[str | Path] = None,
+        ffmpeg_output_file: Optional["str | Path"] = None,
         success_handler: Optional[Callable] = None,
         error_handler: Optional[Callable] = None,
     ):
@@ -212,13 +212,13 @@ class FfmpegProcess:
 
 
 def ffmpeg_process(
-    commands: str | list[str],
+    commands: "str | list[str]",
     ffmpeg_loglevel="verbose",
     hide_tips=False,
     progress_handler: Optional[
         Callable[[float, float, Optional[float], Optional[float]], None]
     ] = None,
-    ffmpeg_output_file: Optional[str | Path] = None,
+    ffmpeg_output_file: Optional["str | Path"] = None,
     success_handler: Optional[Callable] = None,
     error_handler: Optional[Callable] = None,
 ):
