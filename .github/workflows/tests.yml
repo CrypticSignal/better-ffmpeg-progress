@@ -1,8 +1,19 @@
 name: Tests
 
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - main
+    paths:
+      - "better_ffmpeg_progress/**"
+      - "tests/**"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "better_ffmpeg_progress/**"
+      - "tests/**"
 
 jobs:
   build:

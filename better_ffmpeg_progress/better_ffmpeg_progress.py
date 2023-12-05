@@ -31,13 +31,15 @@ class FfmpegProcess:
         if "-i" not in commands:
             raise ValueError("FFmpeg command must include '-i'")
 
+        # TODO get correct name if file_name is not the last argument
+        self._output_filepath = commands[-1]
+
         if "-hide_banner" not in commands:
             commands.append("-hide_banner")
         if "-loglevel" not in commands:
             commands.extend(["-loglevel", ffmpeg_loglevel])
 
         self._ffmpeg_args = commands
-        self._output_filepath = commands[-1]
 
         self._set_file_info()
 
@@ -50,6 +52,7 @@ class FfmpegProcess:
         self._current_size = 0.0
 
     def _set_file_info(self):
+        # TODO support multiple input files
         index_of_filepath = self._ffmpeg_args.index("-i") + 1
         self._filepath = self._ffmpeg_args[index_of_filepath]
         self._can_get_duration = True
