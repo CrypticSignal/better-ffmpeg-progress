@@ -15,6 +15,7 @@ class TestFfmpegProgress(TestCase):
         with self.assertRaises(ValueError):
             FfmpegProcess("ffmpeg")
 
+    @patch("subprocess.run")
     def test__should_overwrite(self):
         process = FfmpegProcess("-i")
         self.assertTrue(process._should_overwrite())  # type:ignore

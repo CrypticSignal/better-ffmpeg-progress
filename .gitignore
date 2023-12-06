@@ -1,4 +1,3 @@
-*.txt
 .DS_Store
 .vscode
 .tox
@@ -7,6 +6,7 @@ build/
 dist/
 ffmpeg_output/
 __pycache__
+*.txt
 # Video Files
 *.3gp
 *.avi
