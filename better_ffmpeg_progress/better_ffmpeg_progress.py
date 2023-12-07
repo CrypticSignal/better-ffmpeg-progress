@@ -1,5 +1,6 @@
 import abc
 import inspect
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -11,9 +12,22 @@ from typing import Callable, Optional
 from tqdm import tqdm
 
 
-def getattr_from_instance(f):
+def getattr_from_instance(f: Callable):
     @wraps(f)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self=None, *args, **kwargs):
+        def getattr_without_Base(self, name):
+            # None while function from class which endswith 'Base'
+
+            attr = getattr(self, name)
+            if inspect.isfunction(attr):
+                attr_class_name = attr.__qualname__.partition(".")[0]
+                if attr_class_name.endswith("Base"):
+                    return None
+            return attr
+
+        if self is None:
+            return f(self, *args, **kwargs)
+
         names = inspect.getfullargspec(f).args[1:]
 
         names.reverse()
@@ -26,7 +40,7 @@ def getattr_from_instance(f):
             if arg is not None:
                 names.remove(key)
 
-        instance_vars = {name: getattr(self, name) for name in names}
+        instance_vars = {name: getattr_without_Base(self, name) for name in names}
 
         return f(self, *args, **kwargs, **instance_vars)
 
@@ -80,12 +94,10 @@ class FfmpegProcess(FfmpegProcessBase):
     """
 
     def __init__(self, commands, ffmpeg_loglevel="verbose", hide_tips=False):
-        self.print: Callable[..., None] = (
-            (lambda *msg, **kw: None) if hide_tips else print  # type:ignore
-        )
+        self.print: Callable[..., None] = (lambda *msg, **kw: None) if hide_tips else print
 
         if isinstance(commands, str):
-            commands = commands.split(" ")
+            commands = shlex.split(commands)
 
         if "-i" not in commands:
             raise ValueError("FFmpeg command must include '-i'")
@@ -100,8 +112,7 @@ class FfmpegProcess(FfmpegProcessBase):
 
         self._ffmpeg_args = commands
 
-        self._set_file_info()
-
+        # info init
         self._estimated_size: Optional[float] = None
         self._eta: Optional[float] = None
         self._percentage = 0.0
@@ -109,16 +120,14 @@ class FfmpegProcess(FfmpegProcessBase):
         self._seconds_processed = 0.0
         self._speed = 0.0
         self._current_size = 0.0
+        self._duration_secs = 0.0
+
+        self._set_file_info()
 
         if self.__class__ != FfmpegProcess:
             self.run()
 
-    def _set_file_info(self):
-        # TODO support multiple input files
-        index_of_filepath = self._ffmpeg_args.index("-i") + 1
-        self._filepath = self._ffmpeg_args[index_of_filepath]
-        self._can_get_duration = True
-
+    def _get_duration(self, file_path):
         try:
             process = subprocess.run(
                 [
@@ -130,7 +139,7 @@ class FfmpegProcess(FfmpegProcessBase):
                     "-of",
                     "default=noprint_wrappers=1:nokey=1",
                     "-i",
-                    self._filepath,
+                    file_path,
                 ],
                 capture_output=True,
                 check=True,
@@ -138,13 +147,24 @@ class FfmpegProcess(FfmpegProcessBase):
 
         except subprocess.CalledProcessError:
             self._can_get_duration = False
+            return False
 
         else:
-            self._duration_secs = float(process.stdout)
             self.print(
-                f"The duration of {self._filepath} has been "
-                f"detected as {self._duration_secs} seconds."
+                f"The duration of {file_path} has been "
+                f"detected as {float(process.stdout)} seconds."
             )
+            self._duration_secs += float(process.stdout)
+
+            self._can_get_duration = True
+            return True
+
+    def _set_file_info(self):
+        # TODO support multiple input files
+        index_of_filepath = self._ffmpeg_args.index("-i") + 1
+        self._file_path = self._ffmpeg_args[index_of_filepath]
+
+        self._get_duration(self._file_path)
 
         if self._can_get_duration:
             self._ffmpeg_args += ["-progress", "pipe:1", "-nostats"]
@@ -175,8 +195,8 @@ class FfmpegProcess(FfmpegProcessBase):
         value = ffmpeg_output.partition("=")[-1].strip()
 
         if progress_handler is None:
-            if "out_time_ms" in ffmpeg_output:
-                seconds_processed = round(int(value) / 1_000_000, 1)
+            if ffmpeg_output.startswith("out_time_ms"):
+                seconds_processed = float(value) / 1_000_000
                 if self._progress_bar:
                     self._progress_bar.update(int(seconds_processed - self._progress_bar.n))
             return
@@ -215,17 +235,19 @@ class FfmpegProcess(FfmpegProcessBase):
     @getattr_from_instance
     def run(
         self,
-        progress_handler=None,
-        ffmpeg_output_file=None,
-        success_handler=None,
-        error_handler=None,
+        progress_handler,
+        ffmpeg_output_file,
+        success_handler,
+        error_handler,
     ):
         if not self._should_overwrite():
             return
         if ffmpeg_output_file is None:
             ffmpeg_output_path = Path(tempfile.gettempdir()) / "ffmpeg_output"
             ffmpeg_output_path.mkdir(exist_ok=True)
-            ffmpeg_output_file = ffmpeg_output_path / f"{Path(self._filepath).name}.txt"
+            ffmpeg_output_file = ffmpeg_output_path / f"{Path(self._file_path).name}.txt"
+
+        self.print(f"\nRunning: {' '.join(self._ffmpeg_args)}\n")
 
         if progress_handler is None and self._can_get_duration:
             self._progress_bar = tqdm(
@@ -237,7 +259,6 @@ class FfmpegProcess(FfmpegProcessBase):
 
         with open(ffmpeg_output_file, "a") as f:
             process = subprocess.Popen(self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f)
-            self.print(f"\nRunning: {' '.join(self._ffmpeg_args)}\n")
 
         try:
             while process.poll() is None:

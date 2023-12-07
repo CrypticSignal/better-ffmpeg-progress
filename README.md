@@ -56,12 +56,15 @@ Advanced Example:
 
 ```py
 from better_ffmpeg_progress import FfmpegProcess
+from typing import Optional
 
 class MyProcess(FfmpegProcess):
     ffmpeg_output_path = "ffmpeg_output.txt"
 
     @staticmethod
-    def progress_handler(percentage, speed, eta, estimated_size):
+    def progress_handler(
+        percentage: float, speed: float, eta: Optional[float], estimated_size: Optional[float]
+    ):
         if estimated_size is not None:
             print(f"Estimated Output Filesize: {estimated_size / 1_000_000} MB")
 
@@ -75,7 +78,6 @@ class MyProcess(FfmpegProcess):
         # Code to run if the FFmpeg process encounters an error.
         pass
 
-
 MyProcess("ffmpeg -i input.mp4 -c:a libmp3lame output.mp3")
 ```
 
@@ -83,26 +85,37 @@ or
 
 ```py
 from better_ffmpeg_progress import FfmpegProcess
+from typing import Optional
 
-def handle_progress_info(percentage, speed, eta, estimated_size):
+def handle_progress_info(
+    percentage: float, speed: float, eta: Optional[float], estimated_size: Optional[float]
+):
     if estimated_size is not None:
         print(f"Estimated Output Filesize: {estimated_size / 1_000_000} MB")
+
 
 def handle_success():
     # Code to run if the FFmpeg process completes successfully.
     pass
 
+
 def handle_error():
     # Code to run if the FFmpeg process encounters an error.
     pass
 
-# Pass a list of FFmpeg arguments, like you would if using subprocess.run()
-process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"], hide_tips=True)
 
-ffmpeg_output_path = 'ffmpeg_output.txt'
+# Pass a list of FFmpeg arguments, like you would if using subprocess.run()
+process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
+
+ffmpeg_output_path = "ffmpeg_output.txt"
 
 # Use the run method to run the FFmpeg command.
-process.run(progress_handler=handle_progress_info, ffmpeg_output_file=ffmpeg_output_path, success_handler=handle_success, error_handler=handle_error)
+process.run(
+    progress_handler=handle_progress_info,
+    ffmpeg_output_file=ffmpeg_output_path,
+    success_handler=handle_success,
+    error_handler=handle_error,
+)
 ```
 
 The `FfmpegProcess` class takes the following **optional** arguments:
