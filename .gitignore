@@ -1,5 +1,6 @@
 .DS_Store
 .vscode
+.mypy_cache
 .tox
 better_ffmpeg_progress.egg-info
 build/

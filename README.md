@@ -56,10 +56,11 @@ Advanced Example:
 
 ```py
 from better_ffmpeg_progress import FfmpegProcess
-from typing import Optional
+from typing import Optional, ClassVar
 
 class MyProcess(FfmpegProcess):
-    ffmpeg_output_path = "ffmpeg_output.txt"
+    # class_var and method are optional
+    ffmpeg_output_path: ClassVar[Optional["str | Path"]] = "ffmpeg_output.txt"
 
     @staticmethod
     def progress_handler(
