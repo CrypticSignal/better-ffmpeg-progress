@@ -52,7 +52,7 @@ class FfmpegProcess:
         if self._can_get_duration:
             self._ffmpeg_args += ["-progress", "pipe:1", "-nostats"]
 
-    def _should_overwrite(self):
+    def _should_run_ffmpeg(self):
         dirname = os.path.dirname(self._output_filepath)
         self._dir_files = (
             [file for file in os.listdir(dirname)] if dirname else [file for file in os.listdir()]
@@ -69,6 +69,8 @@ class FfmpegProcess:
 
             self._ffmpeg_args.insert(1, "-y")
             return True
+
+        return True
 
     def _update_progress(self, ffmpeg_output, progress_handler):
         if ffmpeg_output:
@@ -124,7 +126,7 @@ class FfmpegProcess:
         success_handler=None,
         error_handler=None,
     ):
-        if not self._should_overwrite():
+        if not self._should_run_ffmpeg():
             return
 
         if ffmpeg_output_file is None:
