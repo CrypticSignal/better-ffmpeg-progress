@@ -112,3 +112,7 @@ The `run` method takes the following **optional** arguments:
 [05/11/2023]
 
 - [v2.1.2] [Do not exit the Python interpreter after the FFmpeg process is complete](https://github.com/CrypticSignal/better-ffmpeg-progress/commit/0a358810773835297faae688689c6e0d8a5859ae)
+
+[22/04/2024]
+
+- [v2.1.3] Fix issue [#20](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/20)
