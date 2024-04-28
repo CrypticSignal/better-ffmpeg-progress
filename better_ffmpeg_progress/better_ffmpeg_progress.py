@@ -103,7 +103,7 @@ class FfmpegProcess:
                 elif "speed" in ffmpeg_output:
                     speed_str = value[:-1]
 
-                    if speed_str != "0" and "N/A" not in speed_str:
+                    if speed_str != "0" and "N/A" not in value:
                         self._speed = float(speed_str)
 
                         if self._can_get_duration:
