@@ -116,3 +116,7 @@ The `run` method takes the following **optional** arguments:
 [22/04/2024]
 
 - [v2.1.3] Fix issue [#20](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/20)
+
+[28/04/2024]
+
+- [v2.1.4] Fix issue [#21](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/21)
