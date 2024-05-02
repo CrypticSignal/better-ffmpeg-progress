@@ -72,52 +72,47 @@ class FfmpegProcess:
 
         return True
 
-    def _update_progress(self, ffmpeg_output, progress_handler):
-        if ffmpeg_output:
-            value = ffmpeg_output.split("=")[1].strip()
+    def _update_progress(self, ffmpeg_output, metric_name, value, progress_handler):
+        if progress_handler is None:
+            if metric_name == "out_time_ms":
+                seconds_processed = round(int(value) / 1_000_000, 1)
+                seconds_increase = seconds_processed - self._previous_seconds_processed
+                self._progress_bar.update(seconds_increase)
+                self._previous_seconds_processed = seconds_processed
 
-            if progress_handler is None:
-                if "out_time_ms" in ffmpeg_output:
-                    seconds_processed = round(int(value) / 1_000_000, 1)
-                    seconds_increase = seconds_processed - self._previous_seconds_processed
-                    self._progress_bar.update(seconds_increase)
-                    self._previous_seconds_processed = seconds_processed
+        else:
+            if metric_name == "total_size":
+                self._current_size = int(value)
 
-            else:
-                if "total_size" in ffmpeg_output and "N/A" not in value:
-                    self._current_size = int(value)
+            elif metric_name == "out_time_ms":
+                self._seconds_processed = int(value) / 1_000_000
 
-                elif "out_time_ms" in ffmpeg_output:
-                    self._seconds_processed = int(value) / 1_000_000
+                if self._can_get_duration:
+                    self._percentage_progress = (
+                        self._seconds_processed / self._duration_secs
+                    ) * 100
+
+                    if self._current_size is not None and self._percentage_progress != 0.0:
+                        self._estimated_size = self._current_size * (
+                            100 / self._percentage_progress
+                        )
+
+            elif metric_name == "speed":
+                speed_str = value[:-1]
+
+                if speed_str != "0":
+                    self._speed = float(speed_str)
 
                     if self._can_get_duration:
-                        self._percentage_progress = (
-                            self._seconds_processed / self._duration_secs
-                        ) * 100
+                        self._eta = (self._duration_secs - self._seconds_processed) / self._speed
 
-                        if self._current_size is not None and self._percentage_progress != 0.0:
-                            self._estimated_size = self._current_size * (
-                                100 / self._percentage_progress
-                            )
+            if ffmpeg_output == "progress=end":
+                self._percentage_progress = 100
+                self._eta = 0
 
-                elif "speed" in ffmpeg_output:
-                    speed_str = value[:-1]
-
-                    if speed_str != "0" and "N/A" not in value:
-                        self._speed = float(speed_str)
-
-                        if self._can_get_duration:
-                            self._eta = (
-                                self._duration_secs - self._seconds_processed
-                            ) / self._speed
-
-                if ffmpeg_output == "progress=end":
-                    self._percentage_progress = 100
-                    self._eta = 0
-
-                progress_handler(
-                    self._percentage_progress, self._speed, self._eta, self._estimated_size
-                )
+            progress_handler(
+                self._percentage_progress, self._speed, self._eta, self._estimated_size
+            )
 
     def run(
         self,
@@ -145,10 +140,34 @@ class FfmpegProcess:
                 leave=False,
             )
 
-        try:
             while process.poll() is None:
-                ffmpeg_output = process.stdout.readline().decode().strip()
-                self._update_progress(ffmpeg_output, progress_handler)
+                try:
+                    ffmpeg_output = process.stdout.readline().decode().strip()
+
+                except KeyboardInterrupt:
+                    self._progress_bar.close()
+                    print("[KeyboardInterrupt] FFmpeg process killed.")
+                    sys.exit()
+
+                except Exception as e:
+                    print(f"Unable to read FFmpeg output:\n{e}")
+
+                else:
+                    if not ffmpeg_output:
+                        continue
+
+                    metric_name = ffmpeg_output.split("=")[0]
+                    wanted_metrics = ["out_time_ms", "total_size", "speed"]
+
+                    if metric_name not in wanted_metrics:
+                        continue
+
+                    value = ffmpeg_output.split("=")[1].strip()
+
+                    if not value or "N/A" in value:
+                        continue
+
+                    self._update_progress(ffmpeg_output, metric_name, value, progress_handler)
 
             if process.returncode != 0:
                 if error_handler:
@@ -163,11 +182,3 @@ class FfmpegProcess:
                 success_handler()
 
             print(f"\n\nDone! To see FFmpeg's output, check out {ffmpeg_output_file}")
-
-        except KeyboardInterrupt:
-            self._progress_bar.close()
-            print("[KeyboardInterrupt] FFmpeg process killed.")
-            sys.exit()
-
-        except Exception as e:
-            print(f"[Better FFmpeg Process] {e}")
