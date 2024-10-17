@@ -124,13 +124,22 @@ class FfmpegProcess:
         if not self._should_run_ffmpeg():
             return
 
+        print(f"Attempting to run: {' '.join(self._ffmpeg_args)}\n")
+        process = subprocess.Popen(self._ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        stdout = process.stdout.readline().decode()
+        stderr = process.stderr.readline().decode()
+
+        if "No such file" in stderr:
+            print(f"{stderr}It seems like the input filepath or filename is incorrect.")
+            return
+
         if ffmpeg_output_file is None:
             os.makedirs("ffmpeg_output", exist_ok=True)
             ffmpeg_output_file = os.path.join("ffmpeg_output", f"[{Path(self._filepath).name}].txt")
 
         with open(ffmpeg_output_file, "a") as f:
-            process = subprocess.Popen(self._ffmpeg_args, stdout=subprocess.PIPE, stderr=f)
-            print(f"\nRunning: {' '.join(self._ffmpeg_args)}\n")
+            f.write(stdout)
 
         if progress_handler is None and self._can_get_duration:
             self._progress_bar = tqdm(
@@ -140,45 +149,35 @@ class FfmpegProcess:
                 leave=False,
             )
 
-            while process.poll() is None:
-                try:
-                    ffmpeg_output = process.stdout.readline().decode().strip()
+        while process.poll() is None:
+            stdout = process.stdout.readline().decode().strip()
 
-                except KeyboardInterrupt:
-                    self._progress_bar.close()
-                    print("[KeyboardInterrupt] FFmpeg process killed.")
-                    sys.exit()
+            if not stdout:
+                continue
 
-                except Exception as e:
-                    print(f"Unable to read FFmpeg output:\n{e}")
+            metric_name = stdout.split("=")[0]
+            wanted_metrics = ["out_time_ms", "total_size", "speed"]
 
-                else:
-                    if not ffmpeg_output:
-                        continue
+            if metric_name not in wanted_metrics:
+                continue
 
-                    metric_name = ffmpeg_output.split("=")[0]
-                    wanted_metrics = ["out_time_ms", "total_size", "speed"]
+            value = stdout.split("=")[1].strip()
 
-                    if metric_name not in wanted_metrics:
-                        continue
+            if not value or "N/A" in value:
+                continue
 
-                    value = ffmpeg_output.split("=")[1].strip()
+            self._update_progress(stdout, metric_name, value, progress_handler)
+            
+        if process.returncode != 0:
+            if error_handler:
+                error_handler()
+                return
 
-                    if not value or "N/A" in value:
-                        continue
+            print(
+                f"The FFmpeg process encountered an error. The output of FFmpeg can be found in {ffmpeg_output_file}"
+            )
 
-                    self._update_progress(ffmpeg_output, metric_name, value, progress_handler)
+        if success_handler:
+            success_handler()
 
-            if process.returncode != 0:
-                if error_handler:
-                    error_handler()
-                    return
-
-                print(
-                    f"The FFmpeg process encountered an error. The output of FFmpeg can be found in {ffmpeg_output_file}"
-                )
-
-            if success_handler:
-                success_handler()
-
-            print(f"\n\nDone! To see FFmpeg's output, check out {ffmpeg_output_file}")
+        print(f"\n\nDone! To see FFmpeg's output, check out {ffmpeg_output_file}")
