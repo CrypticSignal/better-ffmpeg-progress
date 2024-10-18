@@ -130,3 +130,4 @@ The `run` method takes the following **optional** arguments:
 [18/10/2024]
 
 - [v2.1.6] Notify the user if the input filepath or filename is incorrect.
+- [v2.1.7] Refactor to use threads and queues.
