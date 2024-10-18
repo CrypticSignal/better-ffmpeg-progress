@@ -27,7 +27,9 @@ Where:
 
 ## Installation:
 
-`pip3 install better-ffmpeg-progress --upgrade`
+```
+pip install better-ffmpeg-progress --upgrade
+```
 
 ## Usage:
 
@@ -124,3 +126,7 @@ The `run` method takes the following **optional** arguments:
 [02/05/2024]
 
 - [v2.1.5] Fix issue [#23](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/23) and make an error message more specific. [Here](https://github.com/CrypticSignal/better-ffmpeg-progress/commit/a6ef7f26d080b684144021301f3b2aa5e0834dae) is the relevant commit.
+
+[18/10/2024]
+
+- [v2.1.6] Notify the user if the input filepath or filename is incorrect.
