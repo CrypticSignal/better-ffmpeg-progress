@@ -6,24 +6,21 @@
 
 # Better FFmpeg Progress
 
-Runs an FFmpeg command and uses [tqdm](https://github.com/tqdm/tqdm) to show a progress bar.
+Runs an FFmpeg command and uses [Rich](https://github.com/Textualize/rich) to show a progress bar.
 
 </div>
 
 ## Example:
 
 ```
-39%|███████████████████████████████████████████ | 23.6/60.2 [00:19<00:34, 1.07s/s]
+⠏ Processing... ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
 ```
 
 Where:
 
-- `39%` is the percentage progress.
-- `23.6` seconds of the input file have been processed.
-- `60.2` is the duration of the input file in seconds.
-- `00:19` is the time elapsed since the FFmpeg process started.
-- `00:34` is the estimated time required for the FFmpeg process to complete.
-- `1.07` shows how many seconds of the input file are processed per second.
+- `23%` is the percentage progress.
+- `0:00:04` is the time (H:MM:SS) elapsed.
+- `00:15` is the estimated time until the FFmpeg process completes.
 
 ## Installation:
 
@@ -131,3 +128,6 @@ The `run` method takes the following **optional** arguments:
 
 - [v2.1.6] Notify the user if the input filepath or filename is incorrect.
 - [v2.1.7] Refactor to use threads and queues.
+
+[19/10/2024]
+- [v2.1.8] Use [Rich](https://github.com/Textualize/rich) instead of [tqdm](https://github.com/tqdm/tqdm) and format code with [Ruff](https://github.com/astral-sh/ruff).
