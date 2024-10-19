@@ -1,7 +1,7 @@
 <div align="center">
 
-[![PyPI downloads](https://img.shields.io/pypi/dm/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/pypistats)
-[![PyPI downloads](https://img.shields.io/pypi/dw/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/pypistats)
+[![PyPI downloads](https://img.shields.io/pypi/dm/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
+[![PyPI downloads](https://img.shields.io/pypi/dw/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
 [![GitHub](https://img.shields.io/github/license/crypticsignal/better-ffmpeg-progress?label=License&color=blue)](LICENSE.txt)
 
 # Better FFmpeg Progress
