@@ -131,3 +131,6 @@ The `run` method takes the following **optional** arguments:
 
 [19/10/2024]
 - [v2.1.8] Use [Rich](https://github.com/Textualize/rich) instead of [tqdm](https://github.com/tqdm/tqdm) and format code with [Ruff](https://github.com/astral-sh/ruff).
+
+[20/10/2024]
+- [v2.1.9] Do not clear the terminal before showing the progress bar.

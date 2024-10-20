@@ -239,9 +239,6 @@ class FfmpegProcess:
         if not self._check_output_exists():
             return
 
-        # Clear the terminal
-        print("\033[2J\033[H", end="")
-
         print(f"Executing: {' '.join(self._ffmpeg_args)}")
 
         if self._duration_secs and not progress_handler:
