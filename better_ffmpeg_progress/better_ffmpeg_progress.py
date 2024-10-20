@@ -225,6 +225,7 @@ class FfmpegProcess:
     def run(
         self,
         output_file: Optional[Union[str, Path]] = None,
+        progress_bar_description: str = None,
         progress_handler: Optional[Callable] = None,
         success_handler: Optional[Callable] = None,
         error_handler: Optional[Callable] = None,
@@ -232,6 +233,7 @@ class FfmpegProcess:
         """
         Args:
             output_file: Optional filepath to write FFmpeg output to
+            progress_bar_description: Optional string to set a custom description for the progress bar
             progress_handler: Optional function which receives progress metrics
             success_handler: Optional function to handle successful completion of the FFmpeg process
             error_handler: Optional function for FFmpeg process error handling
@@ -252,7 +254,10 @@ class FfmpegProcess:
                 refresh_per_second=10,
             ) as progress_bar:
                 task_id = progress_bar.add_task(
-                    f"Processing {self._input_filepath.name}", total=self._duration_secs
+                    progress_bar_description
+                    if progress_bar_description is not None
+                    else f"Processing {self._input_filepath.name}",
+                    total=self._duration_secs,
                 )
 
                 self._start_process(

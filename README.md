@@ -13,11 +13,11 @@ Runs an FFmpeg command and uses [Rich](https://github.com/Textualize/rich) to sh
 ## Example:
 
 ```
-⠏ Processing... ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
+⠏ Processing abc.webm ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
 ```
 
 Where:
-
+- `Processing abc.webm` is the description of the progresss bar.
 - `23%` is the percentage progress.
 - `0:00:04` is the time (H:MM:SS) elapsed.
 - `00:15` is the estimated time until the FFmpeg process completes.
@@ -61,13 +61,18 @@ def handle_error():
 # Pass a list of FFmpeg arguments, like you would if using subprocess.run()
 process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:a", "libmp3lame", "output.mp3"])
 
-ffmpeg_output_path = 'ffmpeg_output.txt'
-
 # Use the run method to run the FFmpeg command.
-process.run(progress_handler=handle_progress_info, ffmpeg_output_file=ffmpeg_output_path, success_handler=handle_success, error_handler=handle_error)
+process.run(
+    output_file="ffmpeg_output.txt",
+    progress_bar_description="Converting file...",
+    progress_handler=handle_progress_info,
+    success_handler=handle_success,
+    error_handler=handle_error,
+)
 ```
 
 The `run` method takes the following **optional** arguments:
+- `progress_bar_description` - An optional string to set a custom description for the progress bar. The default description is `Processing <file>`. This can be an empty string if you don't want the progress bar to have a description.
 
 - `progress_handler`
 
@@ -79,9 +84,9 @@ The `run` method takes the following **optional** arguments:
     - Estimated output filesize in bytes. [float]
       - _Note: This is not accurate. Please take the value with a grain of salt._
 
-    The values will be `None` if unknown. The function will receive the aforementioned metrics as arguments, about two times per second.
+    The values will be `None` if unknown. The function will receive the current values of these metrics as arguments, every 0.1s.
 
-- `ffmpeg_output_file` - A string path to define where you want the output of FFmpeg to be saved. By default, this is saved in a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`.
+- `output_file` - A string path to define where you want the output of FFmpeg to be saved. By default, this is saved in a folder named "ffmpeg_output", with the filename `[<input_filename>].txt`.
 
 - `success_handler` - A function to run if the FFmpeg process completes successfully.
 
@@ -134,3 +139,4 @@ The `run` method takes the following **optional** arguments:
 
 [20/10/2024]
 - [v2.1.9] Do not clear the terminal before showing the progress bar.
+- [v2.2.0] Add the ability to set a custom description for the progress bar.
