@@ -143,24 +143,23 @@ class FfmpegProcess:
             pipe.close()
 
     def _write_ffmpeg_output(
-        self, stderr_output: str, output_file: Optional[Union[str, Path]]
+        self,
+        stderr_output: str,
+        log_file: Optional[Union[str, Path]],
+        is_error: bool = False,
     ) -> None:
         """Write FFmpeg stderr to a txt file."""
-        output_dir = Path("ffmpeg_output")
-        output_dir.mkdir(exist_ok=True)
+        Path(log_file).write_text(stderr_output)
 
-        log_file = output_file or output_dir / f"[{self._input_filepath.name}].txt"
-        log_file = Path(log_file)
+        if is_error:
+            return
 
-        log_file.write_text(stderr_output)
-        print(f"Done! FFmpeg log file: {log_file}")
+        print(f"FFmpeg log written to: {log_file}")
 
     def _start_process(
         self,
         progress_bar: Optional[Progress],
         task_id: Optional[int],
-        success_handler: Optional[Callable],
-        error_handler: Optional[Callable],
         progress_handler: Optional[Callable],
     ) -> None:
         process = subprocess.Popen(
@@ -213,18 +212,11 @@ class FfmpegProcess:
             except Empty:
                 pass
 
-        if process.returncode != 0:
-            if error_handler:
-                error_handler()
-            else:
-                sys.exit("\nFFmpeg process failed")
-
-        if success_handler:
-            success_handler()
+        return process.returncode
 
     def run(
         self,
-        output_file: Optional[Union[str, Path]] = None,
+        log_file: Optional[Union[str, Path]] = None,
         progress_bar_description: str = None,
         progress_handler: Optional[Callable] = None,
         success_handler: Optional[Callable] = None,
@@ -232,7 +224,7 @@ class FfmpegProcess:
     ) -> None:
         """
         Args:
-            output_file: Optional filepath to write FFmpeg output to
+            log_file: Optional filepath to write FFmpeg output to
             progress_bar_description: Optional string to set a custom description for the progress bar
             progress_handler: Optional function which receives progress metrics
             success_handler: Optional function to handle successful completion of the FFmpeg process
@@ -260,20 +252,41 @@ class FfmpegProcess:
                     total=self._duration_secs,
                 )
 
-                self._start_process(
+                return_code = self._start_process(
                     progress_bar,
                     task_id,
-                    success_handler,
-                    error_handler,
-                    progress_handler,
+                    None,
                 )
         else:
-            self._start_process(
+            return_code = self._start_process(
                 None,
                 None,
-                success_handler,
-                error_handler,
                 progress_handler,
             )
 
-        self._write_ffmpeg_output("\n".join(self._ffmpeg_stderr), output_file)
+        self._handle_process_ended(
+            return_code, error_handler, success_handler, log_file
+        )
+
+    def _handle_process_ended(
+        self, return_code, error_handler, success_handler, log_file
+    ):
+        if return_code != 0:
+            if error_handler:
+                error_handler()
+
+            ffmpeg_log_file = "ffmpeg_log.txt"
+
+            self._write_ffmpeg_output(
+                "\n".join(self._ffmpeg_stderr), ffmpeg_log_file, is_error=True
+            )
+
+            sys.exit(f"FFmpeg process failed. Check out {ffmpeg_log_file} for details")
+
+        if log_file:
+            self._write_ffmpeg_output("\n".join(self._ffmpeg_stderr), log_file)
+
+        if success_handler:
+            success_handler()
+        else:
+            print("FFmpeg process completed.")
