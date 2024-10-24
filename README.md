@@ -141,5 +141,5 @@ The `run` method takes the following **optional** arguments:
 - [v2.1.9] Do not clear the terminal before showing the progress bar.
 - [v2.2.0] Add the ability to set a custom description for the progress bar.
 
-[22/10/2020]
+[22/10/2024]
 - [v2.2.1] Only create a log file if the `log_file` parameter is specified and always create a log file if the FFmpeg process fails.
