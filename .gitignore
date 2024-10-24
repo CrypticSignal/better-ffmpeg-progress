@@ -15,6 +15,7 @@ __pycache__
 *.mp4
 *.MTS
 *.wmv
+*.webm
 # Audio Files
 *.mp3
 *.wav
