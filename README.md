@@ -143,3 +143,6 @@ The `run` method takes the following **optional** arguments:
 
 [22/10/2024]
 - [v2.2.1] Only create a log file if the `log_file` parameter is specified and always create a log file if the FFmpeg process fails.
+
+[28/10/2024]
+- [v2.2.2] Make printing the detected duration of the input file optional.

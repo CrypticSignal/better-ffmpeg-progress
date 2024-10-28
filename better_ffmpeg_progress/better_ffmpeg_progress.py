@@ -42,13 +42,19 @@ class FfmpegProcess:
 
     WANTED_METRICS = frozenset({"out_time_ms", "total_size", "speed"})
 
-    def __init__(self, command: List[str], ffmpeg_loglevel: str = "verbose"):
+    def __init__(
+        self,
+        command: List[str],
+        ffmpeg_loglevel: str = "verbose",
+        print_detected_duration: bool = True,
+    ):
         if "-i" not in command:
             raise ValueError("FFmpeg command must include '-i'")
 
         self._ffmpeg_args = command + ["-hide_banner", "-loglevel", ffmpeg_loglevel]
         self._ffmpeg_stderr: List[str] = []
         self._output_filepath = Path(command[-1])
+        self._print_detected_duration = print_detected_duration
         self._metrics = Metrics()
         self._duration_secs: Optional[float] = None
         self._current_size: int = 0
@@ -64,9 +70,12 @@ class FfmpegProcess:
             self._duration_secs = float(
                 probe(self._input_filepath)["format"]["duration"]
             )
-            print(
-                f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds"
-            )
+
+            if self._print_detected_duration:
+                print(
+                    f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds"
+                )
+
             # -progress pipe:1 sends progress metrics to stdout AND -stats_period sets the period at which encoding progress/statistics are updated
             # -nostats disables encoding progress/statistics in stderr
             self._ffmpeg_args.extend(
