@@ -176,6 +176,7 @@ class FfmpegProcess:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            shell=True,
         )
 
         stdout_queue, stderr_queue = Queue(), Queue()

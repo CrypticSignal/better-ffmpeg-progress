@@ -146,3 +146,6 @@ The `run` method takes the following **optional** arguments:
 
 [28/10/2024]
 - [v2.2.2] Make printing the detected duration of the input file optional.
+
+[29/10/2024]
+- [v2.3.0] Set `shell=True` to support piping.
