@@ -149,3 +149,4 @@ The `run` method takes the following **optional** arguments:
 
 [29/10/2024]
 - [v2.3.0] Set `shell=True` to support piping.
+- [v2.3.1] Kill FFmpeg process(es) on KeyboardInterrupt

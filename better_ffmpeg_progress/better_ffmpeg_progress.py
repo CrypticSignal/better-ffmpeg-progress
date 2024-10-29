@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from queue import Empty, Queue
 import subprocess
@@ -7,6 +8,7 @@ from threading import Thread
 from typing import Callable, List, Optional, Union
 
 from ffmpeg import probe
+import psutil
 from rich.progress import (
     Progress,
     TextColumn,
@@ -171,12 +173,20 @@ class FfmpegProcess:
         task_id: Optional[int],
         progress_handler: Optional[Callable],
     ) -> None:
+        # Windows
+        if os.name == "nt":
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        # macOS and Linux
+        else:
+            creationflags = 0
+
         process = subprocess.Popen(
             self._ffmpeg_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             shell=True,
+            creationflags=creationflags,
         )
 
         stdout_queue, stderr_queue = Queue(), Queue()
@@ -187,40 +197,45 @@ class FfmpegProcess:
             target=self._handle_pipe, args=(process.stderr, stderr_queue), daemon=True
         ).start()
 
-        while process.poll() is None:
-            try:
-                stdout = stdout_queue.get_nowait()
+        try:
+            while process.poll() is None:
+                try:
+                    stdout = stdout_queue.get_nowait()
 
-                if stdout:
-                    metric, value = stdout.split("=")
-
-                    if metric in self.WANTED_METRICS and value and "N/A" not in value:
-                        self._update_metrics(stdout, metric, value, progress_handler)
+                    if stdout:
+                        metric, value = stdout.split("=")
 
                         if (
-                            metric == "out_time_ms"
-                            and progress_bar
-                            and task_id is not None
+                            metric in self.WANTED_METRICS
+                            and value
+                            and "N/A" not in value
                         ):
-                            progress_bar.update(
-                                task_id,
-                                completed=self._metrics.seconds_processed,
-                                speed=self._metrics.speed,
+                            self._update_metrics(
+                                stdout, metric, value, progress_handler
                             )
-            except Empty:
-                pass
 
-            try:
-                stderr = stderr_queue.get_nowait()
+                            if (
+                                metric == "out_time_ms"
+                                and progress_bar
+                                and task_id is not None
+                            ):
+                                progress_bar.update(
+                                    task_id,
+                                    completed=self._metrics.seconds_processed,
+                                    speed=self._metrics.speed,
+                                )
+                except Empty:
+                    pass
 
-                if "No such file" in stderr:
-                    raise FileNotFoundError(
-                        f"Input file not found: {self._input_filepath}"
-                    )
+                try:
+                    stderr = stderr_queue.get_nowait()
+                    self._ffmpeg_stderr.append(stderr)
+                except Empty:
+                    pass
 
-                self._ffmpeg_stderr.append(stderr)
-            except Empty:
-                pass
+        except KeyboardInterrupt:
+            self._kill_process_and_children(process.pid)
+            sys.exit("[KeyboardInterrupt] FFmpeg process(es) killed.")
 
         return process.returncode
 
@@ -300,3 +315,13 @@ class FfmpegProcess:
             success_handler()
         else:
             print("FFmpeg process completed.")
+
+    def _kill_process_and_children(self, proc_pid):
+        try:
+            process = psutil.Process(proc_pid)
+            for child in process.children(recursive=True):
+                child.terminate()
+            # Terminate the main process
+            process.terminate()
+        except psutil.NoSuchProcess:
+            pass
