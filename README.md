@@ -13,7 +13,7 @@ FFmpeg outputs something like:
 ```
 frame=  692 fps= 58 q=28.0 size=    5376KiB time=00:00:28.77 bitrate=1530.3kbits/s speed=2.43x
 ```
-Better FFmpeg Process outputs something like:
+Better FFmpeg Progress outputs something like:
 ```
 ⠏ Processing abc.webm ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
 ```
