@@ -153,3 +153,4 @@ The `run` method takes the following **optional** arguments:
 
 [31/10/2024]
 - [v2.4.0] Print FFmpeg stderr if better progress information cannot be shown.
+- [v2.4.0] Flush the stream when printing FFmpeg stderr to ensure that it is printed immediately.

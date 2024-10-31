@@ -225,7 +225,7 @@ class FfmpegProcess:
                     stderr = stderr_queue.get_nowait()
 
                     if self._duration_secs is None:
-                        print(stderr, end="\r")
+                        print(stderr, end="\r", flush=True)
 
                     self._ffmpeg_stderr.append(stderr)
                 except Empty:
@@ -233,7 +233,9 @@ class FfmpegProcess:
 
         except KeyboardInterrupt:
             self._kill_process_and_children(process.pid)
-            sys.exit("[KeyboardInterrupt] FFmpeg process(es) killed.")
+            sys.exit(
+                f"{"\n" if self._duration_secs is None else ""}[KeyboardInterrupt] FFmpeg process(es) killed."
+            )
 
         return process.returncode
 
