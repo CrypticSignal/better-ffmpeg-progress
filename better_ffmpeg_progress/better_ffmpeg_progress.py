@@ -79,15 +79,11 @@ class FfmpegProcess:
                 )
 
             # -progress pipe:1 sends progress metrics to stdout AND -stats_period sets the period at which encoding progress/statistics are updated
-            # -nostats disables encoding progress/statistics in stderr
-            self._ffmpeg_args.extend(
-                ["-progress", "pipe:1", "-stats_period", "0.1", "-nostats"]
-            )
+            self._ffmpeg_args.extend(["-progress", "pipe:1", "-stats_period", "0.1"])
         except Exception:
             print(
-                f"Could not detect the duration of {self._input_filepath.name}. Percentage progress, ETA and estimated filesize will be unavailable."
+                f"Could not detect the duration of '{self._input_filepath.name}'. Percentage progress, ETA and estimated filesize will be unavailable.\n",
             )
-            self._duration_secs = None
 
     def _check_output_exists(self) -> bool:
         """Check if output file exists and handle overwrite prompt."""
@@ -165,7 +161,9 @@ class FfmpegProcess:
         if is_error:
             return
 
-        print(f"FFmpeg log written to: {log_file}")
+        print(
+            f"{"\n\n" if self._duration_secs is None else ""}FFmpeg log filename: {log_file}"
+        )
 
     def _start_process(
         self,
@@ -173,12 +171,7 @@ class FfmpegProcess:
         task_id: Optional[int],
         progress_handler: Optional[Callable],
     ) -> None:
-        # Windows
-        if os.name == "nt":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-        # macOS and Linux
-        else:
-            creationflags = 0
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
         process = subprocess.Popen(
             self._ffmpeg_args,
@@ -199,36 +192,41 @@ class FfmpegProcess:
 
         try:
             while process.poll() is None:
-                try:
-                    stdout = stdout_queue.get_nowait()
+                if self._duration_secs is not None:
+                    try:
+                        stdout = stdout_queue.get_nowait()
 
-                    if stdout:
-                        metric, value = stdout.split("=")
-
-                        if (
-                            metric in self.WANTED_METRICS
-                            and value
-                            and "N/A" not in value
-                        ):
-                            self._update_metrics(
-                                stdout, metric, value, progress_handler
-                            )
+                        if stdout:
+                            metric, value = stdout.split("=")
 
                             if (
-                                metric == "out_time_ms"
-                                and progress_bar
-                                and task_id is not None
+                                metric in self.WANTED_METRICS
+                                and value
+                                and "N/A" not in value
                             ):
-                                progress_bar.update(
-                                    task_id,
-                                    completed=self._metrics.seconds_processed,
-                                    speed=self._metrics.speed,
+                                self._update_metrics(
+                                    stdout, metric, value, progress_handler
                                 )
-                except Empty:
-                    pass
+
+                                if (
+                                    metric == "out_time_ms"
+                                    and progress_bar
+                                    and task_id is not None
+                                ):
+                                    progress_bar.update(
+                                        task_id,
+                                        completed=self._metrics.seconds_processed,
+                                        speed=self._metrics.speed,
+                                    )
+                    except Empty:
+                        pass
 
                 try:
                     stderr = stderr_queue.get_nowait()
+
+                    if self._duration_secs is None:
+                        print(stderr, end="\r")
+
                     self._ffmpeg_stderr.append(stderr)
                 except Empty:
                     pass
@@ -258,7 +256,9 @@ class FfmpegProcess:
         if not self._check_output_exists():
             return
 
-        print(f"Executing: {' '.join(self._ffmpeg_args)}")
+        print(
+            f"Executing: {' '.join(self._ffmpeg_args)}{"\n" if self._duration_secs is None else ""}"
+        )
 
         if self._duration_secs and not progress_handler:
             with Progress(
@@ -314,7 +314,9 @@ class FfmpegProcess:
         if success_handler:
             success_handler()
         else:
-            print("FFmpeg process completed.")
+            print(
+                f"{"\n" if self._duration_secs is None else ""}FFmpeg process completed."
+            )
 
     def _kill_process_and_children(self, proc_pid):
         try:
