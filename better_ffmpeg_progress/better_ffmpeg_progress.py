@@ -35,7 +35,9 @@ class FfmpegProcess:
     """
     Args:
         command: A list of arguments to pass to FFmpeg.
-        ffmpeg_loglevel: Desired FFmpeg log level. Default is "verbose".
+        ffmpeg_loglevel: Desired FFmpeg log level. Default: "verbose"
+        print_stderr_new_line: If better progress information cannot be shown, print FFmpeg stderr in a new line instead of replacing the current line in the terminal. Default: False
+        print_detected_duration: Print the detected duration of the input file. Default: True
 
     Raises:
         FileNotFoundError: If FFmpeg cannot find the input filepath or filename.
@@ -49,6 +51,7 @@ class FfmpegProcess:
         command: List[str],
         ffmpeg_loglevel: str = "verbose",
         print_detected_duration: bool = True,
+        print_stderr_new_line: bool = False,
     ):
         if "-i" not in command:
             raise ValueError("FFmpeg command must include '-i'")
@@ -57,6 +60,7 @@ class FfmpegProcess:
         self._ffmpeg_stderr: List[str] = []
         self._output_filepath = Path(command[-1])
         self._print_detected_duration = print_detected_duration
+        self._print_stderr_new_line = print_stderr_new_line
         self._metrics = Metrics()
         self._duration_secs: Optional[float] = None
         self._current_size: int = 0
@@ -225,7 +229,11 @@ class FfmpegProcess:
                     stderr = stderr_queue.get_nowait()
 
                     if self._duration_secs is None:
-                        print(stderr, end="\r", flush=True)
+                        print(
+                            stderr,
+                            end="\n" if self._print_stderr_new_line else "\r",
+                            flush=True,
+                        )
 
                     self._ffmpeg_stderr.append(stderr)
                 except Empty:
