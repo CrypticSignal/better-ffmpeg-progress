@@ -146,3 +146,6 @@ The `run` method takes the following **optional** arguments:
 - [v2.4.0] Print FFmpeg stderr if better progress information cannot be shown.
 - [v2.4.0] Flush the stream when printing FFmpeg stderr to ensure that it is printed immediately.
 - [v2.5.0] Add an option to print FFmpeg stderr on a new line if better progress information cannot be shown.
+
+[11/11/2024]
+- [v2.5.1] Print the correct log file.

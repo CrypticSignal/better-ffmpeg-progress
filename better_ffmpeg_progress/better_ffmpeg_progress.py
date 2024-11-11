@@ -310,7 +310,7 @@ class FfmpegProcess:
             if error_handler:
                 error_handler()
 
-            ffmpeg_log_file = "ffmpeg_log.txt"
+            ffmpeg_log_file = log_file if log_file else "ffmpeg_log.txt"
 
             self._write_ffmpeg_output(
                 "\n".join(self._ffmpeg_stderr), ffmpeg_log_file, is_error=True
