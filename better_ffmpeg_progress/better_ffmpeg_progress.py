@@ -77,6 +77,7 @@ class FfmpegProcess:
         self._duration_secs: Optional[float] = None
         self._current_size: int = 0
         self._ffmpeg_log_file: Optional[Path] = None
+        self._error_messages: list[str] = []
 
         self._get_input_file_duration()
 
@@ -166,6 +167,11 @@ class FfmpegProcess:
         finally:
             pipe.close()
 
+    def _contains_shell_operators(self, command: List[str]) -> bool:
+        """Check if the command contains shell operators."""
+        shell_operators = {"|", ">", "<", ">>", "&&", "||"}
+        return any(op in command for op in shell_operators)
+
     def _start_process(
         self,
         progress_bar: Optional[Progress],
@@ -174,16 +180,22 @@ class FfmpegProcess:
     ) -> int:
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
+        # If command contains shell operators, turn the list into a string.
+        if self._contains_shell_operators(self._ffmpeg_command):
+            final_command = " ".join(self._ffmpeg_command)
+        else:
+            final_command = self._ffmpeg_command
+
         self._write_to_log_file(
-            f"This file contains the log for the following command:\n{' '.join(self._ffmpeg_command)}\n",
+            f"This file contains the log for the following command:\n{final_command if isinstance(final_command, str) else ' '.join(final_command)}\n",
         )
 
         process = subprocess.Popen(
-            self._ffmpeg_command,
+            final_command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            shell=True,
+            shell=isinstance(final_command, str),
             creationflags=creationflags,
         )
 
@@ -195,15 +207,22 @@ class FfmpegProcess:
             target=self._handle_pipe, args=(process.stderr, stderr_queue), daemon=True
         ).start()
 
+        error_words = [
+            "error",
+            "failed",
+            "invalid",
+            "trailing",
+            "unable",
+            "unknown",
+        ]
+
         try:
             while process.poll() is None:
                 if self._duration_secs is not None:
                     try:
                         stdout = stdout_queue.get_nowait()
-
                         if stdout:
                             metric, value = stdout.split("=")
-
                             if (
                                 metric in self.WANTED_METRICS
                                 and value
@@ -212,7 +231,6 @@ class FfmpegProcess:
                                 self._update_metrics(
                                     stdout, metric, value, progress_handler
                                 )
-
                                 if (
                                     metric == "out_time_ms"
                                     and progress_bar
@@ -228,9 +246,11 @@ class FfmpegProcess:
 
                 try:
                     stderr = stderr_queue.get_nowait()
-
                     if stderr:
                         self._write_to_log_file(stderr)
+
+                        if any(keyword in stderr.lower() for keyword in error_words):
+                            self._error_messages.append(stderr)
 
                         if self._duration_secs is None:
                             print(
@@ -252,9 +272,11 @@ class FfmpegProcess:
         while True:
             try:
                 stderr = stderr_queue.get_nowait()
-
                 if stderr:
                     self._write_to_log_file(stderr)
+
+                    if any(keyword in stderr.lower() for keyword in error_words):
+                        self._error_messages.append(stderr)
 
                     if self._duration_secs is None:
                         print(
@@ -338,7 +360,7 @@ class FfmpegProcess:
                 error_handler()
 
             sys.exit(
-                f"FFmpeg process failed. Check out '{self._ffmpeg_log_file}' for details."
+                f"FFmpeg process failed with return code {return_code}.\nError(s):\n{"\n".join(self._error_messages)}\nCheck out '{self._ffmpeg_log_file}' for more details."
             )
 
         if success_handler:

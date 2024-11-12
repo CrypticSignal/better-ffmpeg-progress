@@ -154,3 +154,4 @@ The `run` method takes the following **optional** arguments:
 - [v2.5.2] Drain any remaining FFmpeg stderr after the process ends.
 - [v2.5.3] Write FFmpeg stderr to the log file in real time.
 - [v2.5.4] Include progress info in stderr if the duration of the input file cannot be detected.
+- [v2.5.5] Print detected errors in the terminal and only set `shell=True` if shell operators are detected.
