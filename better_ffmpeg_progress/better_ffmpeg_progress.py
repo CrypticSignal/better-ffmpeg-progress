@@ -58,8 +58,6 @@ class FfmpegProcess:
 
         # -progress pipe:1 sends progress metrics to stdout
         # -stats_period sets the period at which encoding progress/statistics are updated
-        # -nostats ensures that progress information is not sent to stderr as this info is not needed in the log file, e.g.
-        # frame= 1381 fps=254 q=18.0 size=   46592KiB time=00:00:46.07 bitrate=8283.1kbits/s speed=8.47x
         command.extend(
             [
                 "-loglevel",
@@ -68,7 +66,6 @@ class FfmpegProcess:
                 "pipe:1",
                 "-stats_period",
                 "0.1",
-                "-nostats",
             ]
         )
 
@@ -97,6 +94,9 @@ class FfmpegProcess:
                 print(
                     f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds"
                 )
+                # -nostats ensures that progress information is not sent to stderr as this info is not needed in the log file, e.g.
+                # frame= 1381 fps=254 q=18.0 size=   46592KiB time=00:00:46.07 bitrate=8283.1kbits/s speed=8.47x
+                self._ffmpeg_command.extend(["-nostats"])
         except Exception:
             print(
                 f"Could not detect the duration of '{self._input_filepath.name}'. Percentage progress, ETA and estimated filesize will be unavailable.\n",
