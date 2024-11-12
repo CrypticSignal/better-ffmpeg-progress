@@ -149,3 +149,6 @@ The `run` method takes the following **optional** arguments:
 
 [11/11/2024]
 - [v2.5.1] Print the correct log file.
+
+[12/11/2024]
+- [v2.5.2] Drain any remaining FFmpeg stderr after the process ends.
