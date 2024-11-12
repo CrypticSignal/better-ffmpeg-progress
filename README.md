@@ -152,3 +152,4 @@ The `run` method takes the following **optional** arguments:
 
 [12/11/2024]
 - [v2.5.2] Drain any remaining FFmpeg stderr after the process ends.
+- [v2.5.3] Write FFmpeg stderr to the log file in real time.

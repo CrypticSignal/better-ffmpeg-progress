@@ -56,21 +56,37 @@ class FfmpegProcess:
         if "-i" not in command:
             raise ValueError("FFmpeg command must include '-i'")
 
-        self._ffmpeg_args = command + ["-hide_banner", "-loglevel", ffmpeg_loglevel]
-        self._ffmpeg_stderr: List[str] = []
+        # -progress pipe:1 sends progress metrics to stdout
+        # -stats_period sets the period at which encoding progress/statistics are updated
+        # -nostats ensures that progress information is not sent to stderr as this info is not needed in the log file, e.g.
+        # frame= 1381 fps=254 q=18.0 size=   46592KiB time=00:00:46.07 bitrate=8283.1kbits/s speed=8.47x
+        command.extend(
+            [
+                "-loglevel",
+                ffmpeg_loglevel,
+                "-progress",
+                "pipe:1",
+                "-stats_period",
+                "0.1",
+                "-nostats",
+            ]
+        )
+
+        self._ffmpeg_command = command
         self._output_filepath = Path(command[-1])
         self._print_detected_duration = print_detected_duration
         self._print_stderr_new_line = print_stderr_new_line
         self._metrics = Metrics()
         self._duration_secs: Optional[float] = None
         self._current_size: int = 0
+        self._ffmpeg_log_file: Optional[Path] = None
 
         self._get_input_file_duration()
 
     def _get_input_file_duration(self) -> None:
         """Use ffprobe to get the duration of the input file"""
-        index_of_filepath = self._ffmpeg_args.index("-i") + 1
-        self._input_filepath = Path(self._ffmpeg_args[index_of_filepath])
+        index_of_filepath = self._ffmpeg_command.index("-i") + 1
+        self._input_filepath = Path(self._ffmpeg_command[index_of_filepath])
 
         try:
             self._duration_secs = float(
@@ -81,9 +97,6 @@ class FfmpegProcess:
                 print(
                     f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds"
                 )
-
-            # -progress pipe:1 sends progress metrics to stdout AND -stats_period sets the period at which encoding progress/statistics are updated
-            self._ffmpeg_args.extend(["-progress", "pipe:1", "-stats_period", "0.1"])
         except Exception:
             print(
                 f"Could not detect the duration of '{self._input_filepath.name}'. Percentage progress, ETA and estimated filesize will be unavailable.\n",
@@ -91,7 +104,7 @@ class FfmpegProcess:
 
     def _check_output_exists(self) -> bool:
         """Check if output file exists and handle overwrite prompt."""
-        if self._output_filepath.exists() and "-y" not in self._ffmpeg_args:
+        if self._output_filepath.exists() and "-y" not in self._ffmpeg_command:
             choice = input(
                 f"{self._output_filepath} already exists. Overwrite? [Y/N]: "
             ).lower()
@@ -100,7 +113,7 @@ class FfmpegProcess:
                     "FFmpeg process cancelled. Output file exists and overwrite declined."
                 )
                 return False
-            self._ffmpeg_args.insert(1, "-y")
+            self._ffmpeg_command.insert(1, "-y")
         return True
 
     def _update_metrics(
@@ -153,32 +166,20 @@ class FfmpegProcess:
         finally:
             pipe.close()
 
-    def _write_ffmpeg_output(
-        self,
-        stderr_output: str,
-        log_file: Optional[Union[str, Path]],
-        is_error: bool = False,
-    ) -> None:
-        """Write FFmpeg stderr to a txt file."""
-        Path(log_file).write_text(stderr_output)
-
-        if is_error:
-            return
-
-        print(
-            f"{"\n\n" if self._duration_secs is None else ""}FFmpeg log filename: {log_file}"
-        )
-
     def _start_process(
         self,
         progress_bar: Optional[Progress],
         task_id: Optional[int],
         progress_handler: Optional[Callable],
-    ) -> None:
+    ) -> int:
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
 
+        self._write_to_log_file(
+            f"This file contains the log for the following command:\n{' '.join(self._ffmpeg_command)}\n",
+        )
+
         process = subprocess.Popen(
-            self._ffmpeg_args,
+            self._ffmpeg_command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -229,7 +230,7 @@ class FfmpegProcess:
                     stderr = stderr_queue.get_nowait()
 
                     if stderr:
-                        self._ffmpeg_stderr.append(stderr)
+                        self._write_to_log_file(stderr)
 
                         if self._duration_secs is None:
                             print(
@@ -242,6 +243,7 @@ class FfmpegProcess:
 
         except KeyboardInterrupt:
             self._kill_process_and_children(process.pid)
+            self._write_to_log_file("\n[KeyboardInterrupt] FFmpeg process(es) killed.")
             sys.exit(
                 f"{"\n" if self._duration_secs is None else ""}[KeyboardInterrupt] FFmpeg process(es) killed."
             )
@@ -252,7 +254,7 @@ class FfmpegProcess:
                 stderr = stderr_queue.get_nowait()
 
                 if stderr:
-                    self._ffmpeg_stderr.append(stderr)
+                    self._write_to_log_file(stderr)
 
                     if self._duration_secs is None:
                         print(
@@ -267,7 +269,7 @@ class FfmpegProcess:
 
     def run(
         self,
-        log_file: Optional[Union[str, Path]] = None,
+        log_file: Optional[Union[str, Path]] = "ffmpeg_log.txt",
         progress_bar_description: str = None,
         progress_handler: Optional[Callable] = None,
         success_handler: Optional[Callable] = None,
@@ -284,8 +286,13 @@ class FfmpegProcess:
         if not self._check_output_exists():
             return
 
+        self._ffmpeg_log_file = Path(log_file)
+
+        with open(self._ffmpeg_log_file, "w"):
+            pass
+
         print(
-            f"Executing: {' '.join(self._ffmpeg_args)}{"\n" if self._duration_secs is None else ""}"
+            f"Executing: {' '.join(self._ffmpeg_command)}{"\n" if self._duration_secs is None else ""}"
         )
 
         if self._duration_secs and not progress_handler:
@@ -317,27 +324,22 @@ class FfmpegProcess:
                 progress_handler,
             )
 
-        self._handle_process_ended(
-            return_code, error_handler, success_handler, log_file
-        )
+        self._handle_process_ended(return_code, error_handler, success_handler)
 
     def _handle_process_ended(
-        self, return_code, error_handler, success_handler, log_file
-    ):
+        self,
+        return_code: int,
+        error_handler: Optional[Callable],
+        success_handler: Optional[Callable],
+    ) -> None:
+        """Handle the completion of the FFmpeg process."""
         if return_code != 0:
             if error_handler:
                 error_handler()
 
-            ffmpeg_log_file = log_file if log_file else "ffmpeg_log.txt"
-
-            self._write_ffmpeg_output(
-                "\n".join(self._ffmpeg_stderr), ffmpeg_log_file, is_error=True
+            sys.exit(
+                f"FFmpeg process failed. Check out '{self._ffmpeg_log_file}' for details."
             )
-
-            sys.exit(f"FFmpeg process failed. Check out {ffmpeg_log_file} for details")
-
-        if log_file:
-            self._write_ffmpeg_output("\n".join(self._ffmpeg_stderr), log_file)
 
         if success_handler:
             success_handler()
@@ -346,7 +348,8 @@ class FfmpegProcess:
                 f"{"\n" if self._duration_secs is None else ""}FFmpeg process completed."
             )
 
-    def _kill_process_and_children(self, proc_pid):
+    def _kill_process_and_children(self, proc_pid: int) -> None:
+        """Kill the FFmpeg process and its children."""
         try:
             process = psutil.Process(proc_pid)
             for child in process.children(recursive=True):
@@ -355,3 +358,9 @@ class FfmpegProcess:
             process.terminate()
         except psutil.NoSuchProcess:
             pass
+
+    def _write_to_log_file(self, message: str, mode: str = "a") -> None:
+        if self._ffmpeg_log_file:
+            with open(self._ffmpeg_log_file, mode) as f:
+                f.write(f"{message}\n")
+                f.flush()  # Ensure the message is written immediately
