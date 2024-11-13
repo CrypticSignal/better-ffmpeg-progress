@@ -214,6 +214,20 @@ class FfmpegProcess:
             "trailing",
             "unable",
             "unknown",
+            "no such file",
+            "permission denied",
+            "not found",
+            "unrecognized",
+            "undefined",
+            "unsupported",
+            "does not exist",
+            "missing",
+            "not available",
+            "cannot",
+            "could not",
+            "bad",
+            "wrong",
+            "forbidden",
         ]
 
         try:
