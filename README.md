@@ -158,3 +158,6 @@ The `run` method takes the following **optional** arguments:
 
 [13/11/2024]
 - [v2.5.6] Detect a wider range of errors.
+
+[18/11/2024]
+- [v2.5.7] Fix syntax. Should fix issue #26

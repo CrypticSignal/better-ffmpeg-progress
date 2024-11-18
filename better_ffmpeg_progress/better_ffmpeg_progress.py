@@ -279,7 +279,7 @@ class FfmpegProcess:
             self._kill_process_and_children(process.pid)
             self._write_to_log_file("\n[KeyboardInterrupt] FFmpeg process(es) killed.")
             sys.exit(
-                f"{"\n" if self._duration_secs is None else ""}[KeyboardInterrupt] FFmpeg process(es) killed."
+                f"{'\n' if self._duration_secs is None else ''}[KeyboardInterrupt] FFmpeg process(es) killed."
             )
 
         # After the process ends, drain any remaining stderr
@@ -328,7 +328,7 @@ class FfmpegProcess:
             pass
 
         print(
-            f"Executing: {' '.join(self._ffmpeg_command)}{"\n" if self._duration_secs is None else ""}"
+            f"Executing: {' '.join(self._ffmpeg_command)}{'\n' if self._duration_secs is None else ''}"
         )
 
         if self._duration_secs and not progress_handler:
@@ -374,14 +374,14 @@ class FfmpegProcess:
                 error_handler()
 
             sys.exit(
-                f"FFmpeg process failed with return code {return_code}.\nError(s):\n{"\n".join(self._error_messages)}\nCheck out '{self._ffmpeg_log_file}' for more details."
+                f"FFmpeg process failed with return code {return_code}.\nError(s):\n{'\n'.join(self._error_messages)}\nCheck out '{self._ffmpeg_log_file}' for more details."
             )
 
         if success_handler:
             success_handler()
         else:
             print(
-                f"{"\n" if self._duration_secs is None else ""}FFmpeg process completed."
+                f"{'\n' if self._duration_secs is None else ''}FFmpeg process completed."
             )
 
     def _kill_process_and_children(self, proc_pid: int) -> None:
