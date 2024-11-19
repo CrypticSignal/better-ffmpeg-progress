@@ -1,3 +1,4 @@
+.tox
 *.txt
 .DS_Store
 .vscode
