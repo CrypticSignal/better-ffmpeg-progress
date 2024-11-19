@@ -161,3 +161,6 @@ The `run` method takes the following **optional** arguments:
 
 [18/11/2024]
 - [v2.5.7] Fix syntax. Should fix issue #26
+
+[19/11/2024]
+- [v2.5.8] Remove `\n` from replacement fields in f-strings. Should fix issue #26

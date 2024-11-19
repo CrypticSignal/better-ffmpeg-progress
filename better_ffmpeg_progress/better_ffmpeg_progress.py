@@ -7,6 +7,8 @@ import sys
 from threading import Thread
 from typing import Callable, List, Optional, Union
 
+from .utils import line, print_with_prefix
+
 from ffmpeg import probe
 import psutil
 from rich.progress import (
@@ -60,6 +62,7 @@ class FfmpegProcess:
         # -stats_period sets the period at which encoding progress/statistics are updated
         command.extend(
             [
+                "-hide_banner",
                 "-loglevel",
                 ffmpeg_loglevel,
                 "-progress",
@@ -74,11 +77,11 @@ class FfmpegProcess:
         self._print_detected_duration = print_detected_duration
         self._print_stderr_new_line = print_stderr_new_line
         self._metrics = Metrics()
-        self._duration_secs: Optional[float] = None
+        self._duration_secs: Optional[float]
         self._current_size: int = 0
         self._ffmpeg_log_file: Optional[Path] = None
         self._error_messages: list[str] = []
-
+        line()
         self._get_input_file_duration()
 
     def _get_input_file_duration(self) -> None:
@@ -95,13 +98,15 @@ class FfmpegProcess:
                 print(
                     f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds"
                 )
-                # -nostats ensures that progress information is not sent to stderr as this info is not needed in the log file, e.g.
-                # frame= 1381 fps=254 q=18.0 size=   46592KiB time=00:00:46.07 bitrate=8283.1kbits/s speed=8.47x
-                self._ffmpeg_command.extend(["-nostats"])
+
+            # -nostats ensures that progress information is not sent to stderr as this info is not needed in the log file, e.g.
+            # frame= 1381 fps=254 q=18.0 size=   46592KiB time=00:00:46.07 bitrate=8283.1kbits/s speed=8.47x
+            self._ffmpeg_command.extend(["-nostats"])
         except Exception:
             print(
                 f"Could not detect the duration of '{self._input_filepath.name}'. Percentage progress, ETA and estimated filesize will be unavailable.\n",
             )
+            self._duration_secs = None
 
     def _check_output_exists(self) -> bool:
         """Check if output file exists and handle overwrite prompt."""
@@ -278,9 +283,7 @@ class FfmpegProcess:
         except KeyboardInterrupt:
             self._kill_process_and_children(process.pid)
             self._write_to_log_file("\n[KeyboardInterrupt] FFmpeg process(es) killed.")
-            sys.exit(
-                f"{'\n' if self._duration_secs is None else ''}[KeyboardInterrupt] FFmpeg process(es) killed."
-            )
+            sys.exit("\n[KeyboardInterrupt] FFmpeg process(es) killed.")
 
         # After the process ends, drain any remaining stderr
         while True:
@@ -327,9 +330,8 @@ class FfmpegProcess:
         with open(self._ffmpeg_log_file, "w"):
             pass
 
-        print(
-            f"Executing: {' '.join(self._ffmpeg_command)}{'\n' if self._duration_secs is None else ''}"
-        )
+        line()
+        print(f"Executing: {' '.join(self._ffmpeg_command)}")
 
         if self._duration_secs and not progress_handler:
             with Progress(
@@ -372,16 +374,20 @@ class FfmpegProcess:
         if return_code != 0:
             if error_handler:
                 error_handler()
+                sys.exit(
+                    "\nThe FFmpeg process encounted an error. Custom error handler executed."
+                )
 
-            sys.exit(
-                f"FFmpeg process failed with return code {return_code}.\nError(s):\n{'\n'.join(self._error_messages)}\nCheck out '{self._ffmpeg_log_file}' for more details."
-            )
+            print(f"FFmpeg process failed with return code {return_code}.\nError(s):")
+            print("\n".join(self._error_messages))
+            print(f"Check out '{self._ffmpeg_log_file}' for more details.")
+            sys.exit(1)
 
         if success_handler:
             success_handler()
         else:
-            print(
-                f"{'\n' if self._duration_secs is None else ''}FFmpeg process completed."
+            print_with_prefix(
+                "FFmpeg process completed.", "\n" if self._duration_secs is None else ""
             )
 
     def _kill_process_and_children(self, proc_pid: int) -> None:
