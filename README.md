@@ -73,11 +73,12 @@ process.run(
 ## Optional Arguments
 An instance of the `FfmpegProcess` class takes the following **optional** arguments:
 
-- `ffmpeg_loglevel`: Desired FFmpeg log level. Default: "verbose"
+- `ffmpeg_loglevel`: Desired FFmpeg log level. Default: `"verbose"`
 - `print_stderr_new_line`: If better progress information cannot be shown, print FFmpeg stderr in a new line instead of replacing the current line in the terminal. Default: False
 - `print_detected_duration`: Print the detected duration of the input file. Default: True
 
 The `run` method takes the following **optional** arguments:
+- `print_command` - Print the FFmpeg command being executed. Default: `False`
 - `progress_bar_description` - An optional string to set a custom description for the progress bar. The default description is `Processing <file>`. This can be an empty string if you don't want the progress bar to have a description.
 - `progress_handler`
   - You can create a function if you would like to do something with the following values:

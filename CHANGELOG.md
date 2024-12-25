@@ -68,3 +68,6 @@
 
 [19/11/2024]
 - [v2.5.8] Remove `\n` from replacement fields in f-strings. Should fix issue #26
+
+[25/12/2024]
+- [v2.6.0] Make printing the FFmpeg command being executed optional, remove progress bar on successful process completion and instead show `✓ Processed 100% of <input filename>`
