@@ -71,3 +71,4 @@
 
 [25/12/2024]
 - [v2.6.0] Make printing the FFmpeg command being executed optional, remove progress bar on successful process completion and instead show `✓ Processed 100% of <input filename>`
+- [v2.6.1] Disable duration printing by default and fix overwrite functionality.

@@ -6,5 +6,5 @@ def line():
     print("-" * width)
 
 
-def print_with_prefix(message, prefix):
+def print_with_prefix(prefix, message):
     print(f"{prefix}{message}")

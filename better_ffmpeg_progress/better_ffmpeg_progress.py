@@ -7,7 +7,7 @@ import sys
 from threading import Thread
 from typing import Callable, List, Optional, Union
 
-from .utils import line, print_with_prefix
+from .utils import print_with_prefix
 
 from ffmpeg import probe
 import psutil
@@ -52,7 +52,7 @@ class FfmpegProcess:
         self,
         command: List[str],
         ffmpeg_loglevel: str = "verbose",
-        print_detected_duration: bool = True,
+        print_detected_duration: bool = False,
         print_stderr_new_line: bool = False,
     ):
         if "-i" not in command:
@@ -60,17 +60,17 @@ class FfmpegProcess:
 
         # -progress pipe:1 sends progress metrics to stdout
         # -stats_period sets the period at which encoding progress/statistics are updated
-        command.extend(
-            [
-                "-hide_banner",
-                "-loglevel",
-                ffmpeg_loglevel,
-                "-progress",
-                "pipe:1",
-                "-stats_period",
-                "0.1",
-            ]
-        )
+        extra_ffmpeg_options = [
+            "-hide_banner",
+            "-loglevel",
+            ffmpeg_loglevel,
+            "-progress",
+            "pipe:1",
+            "-stats_period",
+            "0.1",
+        ]
+
+        command[1:1] = extra_ffmpeg_options
 
         self._ffmpeg_command = command
         self._output_filepath = Path(command[-1])
@@ -94,33 +94,36 @@ class FfmpegProcess:
             )
 
             if self._print_detected_duration:
-                line()
-                print(
-                    f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds"
+                print_with_prefix(
+                    "[Better FFmpeg Progress] ",
+                    f"The duration of {self._input_filepath.name} has been detected as {self._duration_secs} seconds",
                 )
-                line()
 
             # -nostats ensures that progress information is not sent to stderr as this info is not needed in the log file, e.g.
             # frame= 1381 fps=254 q=18.0 size=   46592KiB time=00:00:46.07 bitrate=8283.1kbits/s speed=8.47x
             self._ffmpeg_command.extend(["-nostats"])
         except Exception:
-            print(
+            print_with_prefix(
+                "[Better FFmpeg Progress] ",
                 f"Could not detect the duration of '{self._input_filepath.name}'. Percentage progress, ETA and estimated filesize will be unavailable.\n",
             )
             self._duration_secs = None
 
-    def _check_output_exists(self) -> bool:
-        """Check if output file exists and handle overwrite prompt."""
+    def _should_overwrite(self) -> bool:
         if self._output_filepath.exists() and "-y" not in self._ffmpeg_command:
             choice = input(
                 f"{self._output_filepath} already exists. Overwrite? [Y/N]: "
             ).lower()
+
             if choice != "y":
-                print(
-                    "FFmpeg process cancelled. Output file exists and overwrite declined."
+                print_with_prefix(
+                    "[Better FFmpeg Progress] ",
+                    "FFmpeg process cancelled. Output file exists and overwrite declined.",
                 )
                 return False
+
             self._ffmpeg_command.insert(1, "-y")
+
         return True
 
     def _update_metrics(
@@ -327,7 +330,7 @@ class FfmpegProcess:
             success_handler: Optional function to handle successful completion of the FFmpeg process
             error_handler: Optional function for FFmpeg process error handling
         """
-        if not self._check_output_exists():
+        if not self._should_overwrite():
             return
 
         self._ffmpeg_log_file = Path(log_file)
@@ -336,8 +339,6 @@ class FfmpegProcess:
             pass
 
         if print_command:
-            line()
-
             print(f"Executing: {' '.join(self._ffmpeg_command)}")
 
         if self._duration_secs and not progress_handler:
@@ -381,8 +382,8 @@ class FfmpegProcess:
 
             if return_code == 0:
                 print_with_prefix(
-                    "FFmpeg process completed.",
                     "\n" if self._duration_secs is None else "",
+                    "FFmpeg process completed.",
                 )
 
         self._handle_process_ended(return_code, error_handler, success_handler)
@@ -401,9 +402,17 @@ class FfmpegProcess:
                     "\nThe FFmpeg process encounted an error. Custom error handler executed."
                 )
 
-            print(f"FFmpeg process failed with return code {return_code}.\nError(s):")
-            print("\n".join(self._error_messages))
-            print(f"Check out '{self._ffmpeg_log_file}' for more details.")
+            print_with_prefix(
+                "[Better FFmpeg Progress] ",
+                f"FFmpeg process failed with return code {return_code}.\nError(s):",
+            )
+            print_with_prefix(
+                "[Better FFmpeg Progress] ", "\n".join(self._error_messages)
+            )
+            print_with_prefix(
+                "[Better FFmpeg Progress] ",
+                f"Check out '{self._ffmpeg_log_file}' for more details.",
+            )
             sys.exit(1)
 
         if success_handler:
