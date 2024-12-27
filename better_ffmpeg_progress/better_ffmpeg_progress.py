@@ -251,10 +251,21 @@ class FfmpegProcess:
                     except Empty:
                         break
 
-                if process.returncode == 0 and task_id is not None:
+                progress_bar.columns = (
+                    TextColumn("[progress.description]{task.description}"),
+                )
+
+                if process.returncode != 0:
                     progress_bar.update(
-                        task_id, description=f"✓ Processed {self._input_filepath.name}"
+                        task_id,
+                        description=f"The FFmpeg process did not complete successfully. Check out {self._ffmpeg_log_file} for details.",
                     )
+                    return 1
+
+                progress_bar.update(
+                    task_id,
+                    description=f"✓ Processed {self._input_filepath.name}",
+                )
 
         except KeyboardInterrupt:
             try:
