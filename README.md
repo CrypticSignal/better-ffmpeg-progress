@@ -38,23 +38,15 @@ Here's a simple example:
 from better_ffmpeg_progress import FfmpegProcess
 
 process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:v", "libx265", "output.mp4"])
-
-# return_code will be 0 if the process was successful
+# return_code will be 0 if the process completed successfully, otherwise it will be 1
 return_code = process.run()
-
-if return_code == 0:
-    # Code to run if the process was successful
-    pass
-else:
-    # Code to run if the process was unsuccessful
-    pass
 ```
 ## Optional Arguments
 An instance of the `FfmpegProcess` class takes the following **optional** arguments:
 
 - `ffmpeg_log_level` - Desired FFmpeg log level. Default: `"verbose"`
-- `ffmpeg_log_file` - The filepath to save the FFmpeg log to.
-- `print_detected_duration` - Print the detected duration of the input file. Default: `True`
+- `ffmpeg_log_file` - The filepath to save the FFmpeg log to. Default: `<input filename>_log.txt`
+- `print_detected_duration` - Print the detected duration of the input file. Default: `False`
 - `print_stderr_new_line` - If better progress information cannot be shown, print FFmpeg stderr in a new line instead of replacing the current line in the terminal. Default: `False`
 
 The `run` method takes the following **optional** argument:
