@@ -18,6 +18,7 @@ from rich.progress import (
     TimeElapsedColumn,
     SpinnerColumn,
 )
+from tqdm import tqdm
 
 
 class FfmpegLogLevel(Enum):
@@ -149,7 +150,127 @@ class FfmpegProcess:
             print(f"Error writing to log file: {e}")
             self.return_code = 1
 
-    def run(self, print_command: bool = False) -> int:
+    def _use_rich(self, process, stdout_queue, stderr_queue) -> int:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(compact=True),
+            refresh_per_second=10,
+        ) as progress_bar:
+            task_id = None
+            if self._duration_secs:
+                task_id = progress_bar.add_task(
+                    f"Processing {self._input_filepath.name}",
+                    total=self._duration_secs,
+                )
+
+            while process.poll() is None:
+                # stdout
+                if task_id is not None and not stdout_queue.empty():
+                    try:
+                        line = stdout_queue.get_nowait()
+                        if line.startswith(self.TIME_MS_PREFIX):
+                            try:
+                                value = int(line.split("=")[1]) / 1_000_000
+                                if value <= self._duration_secs:
+                                    progress_bar.update(task_id, completed=value)
+                            except ValueError:
+                                pass
+                    except Empty:
+                        pass
+
+                # stderr
+                if not stderr_queue.empty():
+                    try:
+                        self._process_stderr(stderr_queue.get_nowait())
+                    except Empty:
+                        pass
+
+            # Process remaining stderr
+            while not stderr_queue.empty():
+                try:
+                    self._process_stderr(stderr_queue.get_nowait())
+                except Empty:
+                    break
+
+            progress_bar.columns = (
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+            )
+
+            if process.returncode != 0:
+                progress_bar.update(
+                    task_id,
+                    description=f"The FFmpeg process did not complete successfully. Check out {self._ffmpeg_log_file} for details.",
+                )
+                return 1
+
+            progress_bar.update(
+                task_id,
+                description=f"✓ Processed {self._input_filepath.name}",
+            )
+
+            return 0
+
+    def _use_tqdm(self, process, stdout_queue, stderr_queue) -> int:
+        pbar = None
+        width, _ = os.get_terminal_size()
+
+        if self._duration_secs:
+            pbar = tqdm(
+                total=self._duration_secs,
+                desc=f"Processing {self._input_filepath.name}",
+                ncols=80,
+                dynamic_ncols=True if width < 80 else False,
+                bar_format="{desc} {bar} {percentage:.1f}% {elapsed} {remaining}",
+            )
+
+        while process.poll() is None:
+            # stdout
+            if pbar and not stdout_queue.empty():
+                try:
+                    line = stdout_queue.get_nowait()
+                    if line.startswith(self.TIME_MS_PREFIX):
+                        try:
+                            value = int(line.split("=")[1]) / 1_000_000
+                            if value <= self._duration_secs:
+                                pbar.n = value
+                                pbar.refresh()
+                        except ValueError:
+                            pass
+                except Empty:
+                    pass
+            # stderr
+            if not stderr_queue.empty():
+                try:
+                    self._process_stderr(stderr_queue.get_nowait())
+                except Empty:
+                    pass
+
+        # Process remaining stderr
+        while not stderr_queue.empty():
+            try:
+                self._process_stderr(stderr_queue.get_nowait())
+            except Empty:
+                break
+
+        if process.returncode != 0:
+            print(
+                f"The FFmpeg process did not complete successfully. Check out {self._ffmpeg_log_file} for details."
+            )
+            return 1
+
+        pbar.set_description(f"✓ Processed {self._input_filepath.name}")
+        if pbar:
+            pbar.close()
+
+        return 0
+
+    def run(self, print_command: bool = False, use_tqdm: bool = False) -> int:
         if hasattr(self, "return_code") and self.return_code != 0:
             return 1
 
@@ -206,72 +327,13 @@ class FfmpegProcess:
         ).start()
 
         try:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeElapsedColumn(),
-                TimeRemainingColumn(compact=True),
-                refresh_per_second=10,
-            ) as progress_bar:
-                task_id = None
-                if self._duration_secs:
-                    task_id = progress_bar.add_task(
-                        f"Processing {self._input_filepath.name}",
-                        total=self._duration_secs,
-                    )
-
-                while process.poll() is None:
-                    # stdout
-                    if task_id is not None and not stdout_queue.empty():
-                        try:
-                            line = stdout_queue.get_nowait()
-                            if line.startswith(self.TIME_MS_PREFIX):
-                                try:
-                                    value = int(line.split("=")[1]) / 1_000_000
-                                    if value <= self._duration_secs:
-                                        progress_bar.update(task_id, completed=value)
-                                except ValueError:
-                                    pass
-                        except Empty:
-                            pass
-
-                    # stderr
-                    if not stderr_queue.empty():
-                        try:
-                            self._process_stderr(stderr_queue.get_nowait())
-                        except Empty:
-                            pass
-
-                # Process remaining stderr
-                while not stderr_queue.empty():
-                    try:
-                        self._process_stderr(stderr_queue.get_nowait())
-                    except Empty:
-                        break
-
-                progress_bar.columns = (
-                    TextColumn("[progress.description]{task.description}"),
-                )
-
-                if process.returncode != 0:
-                    progress_bar.update(
-                        task_id,
-                        description=f"The FFmpeg process did not complete successfully. Check out {self._ffmpeg_log_file} for details.",
-                    )
-                    return 1
-
-                progress_bar.update(
-                    task_id,
-                    description=f"✓ Processed {self._input_filepath.name}",
-                )
-
+            if use_tqdm:
+                return self._use_tqdm(process, stdout_queue, stderr_queue)
+            else:
+                return self._use_rich(process, stdout_queue, stderr_queue)
         except KeyboardInterrupt:
             try:
                 psutil.Process(process.pid).terminate()
             except psutil.NoSuchProcess:
                 pass
             return 1
-
-        return 0 if process.returncode == 0 else 1

@@ -76,3 +76,9 @@
 [27/12/2024]
 - [v3.0.0] [Refactor] Handle process success/failure through a return code instead of supplying success/error handler functions. Remove the ability to provide a custom progress handler.
 - [v3.1.0] Inform the user that they can check out the log file if the FFmpeg process did not complete successfully.
+
+[18/02/2025]
+- [v3.2.0] 
+    - Support using [tqdm](https://github.com/tqdm/tqdm) instead of [Rich](https://github.com/Textualize/rich).
+    - Rich is used by default.
+    - Keep the progress bar and percentage progress upon completion.

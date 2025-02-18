@@ -7,6 +7,8 @@
 
 # Better FFmpeg Progress
 Runs an FFmpeg command and shows a progress bar with percentage progress, time elapsed and ETA.
+
+The [Rich](https://github.com/Textualize/rich) library is used for the progress bar by default, [tqdm](https://github.com/tqdm/tqdm) will be used if you pass `use_tqdm=True` to the `run` method.
 </div>
 
 FFmpeg outputs something like:
@@ -20,7 +22,7 @@ Better FFmpeg Progress outputs something like:
 Where:
 - `Processing abc.webm` is the description of the progresss bar.
 - `23%` is the percentage progress.
-- `0:00:04` is the time (H:MM:SS) elapsed.
+- `0:00:04` is the time elapsed.
 - `00:15` is the estimated time until the FFmpeg process completes.
 
 As you can see, the output of Better FFmpeg Progress is much more useful.
@@ -49,5 +51,6 @@ An instance of the `FfmpegProcess` class takes the following **optional** argume
 - `print_detected_duration` - Print the detected duration of the input file. Default: `False`
 - `print_stderr_new_line` - If better progress information cannot be shown, print FFmpeg stderr in a new line instead of replacing the current line in the terminal. Default: `False`
 
-The `run` method takes the following **optional** argument:
+The `run` method takes the following **optional** arguments:
 - `print_command` - Print the FFmpeg command being executed. Default: `False`
+- `use_tqdm` - Use [tqdm](https://github.com/tqdm/tqdm) instead of [Rich](https://github.com/Textualize/rich) for the progress bar. Default: `False`
