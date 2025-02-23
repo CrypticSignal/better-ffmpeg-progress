@@ -82,3 +82,9 @@
     - Support using [tqdm](https://github.com/tqdm/tqdm) instead of [Rich](https://github.com/Textualize/rich).
     - Rich is used by default.
     - Keep the progress bar and percentage progress upon completion.
+
+[23/02/2025]
+- [v3.2.1] 
+    - Leave FFmpeg encoding progress/statistics update frequency as the default of 2 times per second, instead of 10 times per second.
+    - Add a 0.5 seconds sleep at the start of the `while process.poll() is None` loop to eliminate unnecessary iterations of this loop.
+    - Use `Queue.get()` instead of `Queue.get_nowait()`. Non-blocking queue item retrieval is not needed due to the `not stdout_queue.empty()` and `not stderr_queue.empty()` checks. Because of these checks, `get()` will never block as we only run this code if the queue is not empty. Refer to issue #29 for context.

@@ -2,10 +2,11 @@ from enum import Enum
 import os
 from pathlib import Path
 import psutil
-from queue import Empty, Queue
+from queue import Queue
 import shutil
 import subprocess
 from threading import Thread
+from time import sleep
 from typing import List, Optional, Union
 
 from ffmpeg import probe
@@ -34,8 +35,6 @@ class FfmpegLogLevel(Enum):
 
 
 class FfmpegProcess:
-    TIME_MS_PREFIX = "out_time_ms="
-
     @staticmethod
     def _read_pipe(pipe: subprocess.PIPE, queue: Queue, stdout: bool = False) -> None:
         """Read from pipe and put lines into queue."""
@@ -120,7 +119,7 @@ class FfmpegProcess:
             probe_data = probe(self._input_filepath)
             self._duration_secs = float(probe_data["format"]["duration"])
             if self._print_detected_duration:
-                print(f"Detected duration: {self._duration_secs:.2f} seconds")
+                print(f"Detected duration: {self._duration_secs} seconds")
         except Exception:
             self._duration_secs = None
 
@@ -131,8 +130,6 @@ class FfmpegProcess:
             self._ffmpeg_log_level,
             "-progress",
             "pipe:1",
-            "-stats_period",
-            "0.1",
             "-nostats",
             *command[1:],
         ]
@@ -161,6 +158,7 @@ class FfmpegProcess:
             refresh_per_second=10,
         ) as progress_bar:
             task_id = None
+
             if self._duration_secs:
                 task_id = progress_bar.add_task(
                     f"Processing {self._input_filepath.name}",
@@ -168,39 +166,36 @@ class FfmpegProcess:
                 )
 
             while process.poll() is None:
+                # FFmpeg only updates encoding progress/statistics every 0.5 seconds
+                sleep(0.5)
                 # stdout
                 if task_id is not None and not stdout_queue.empty():
+                    line = stdout_queue.get()
                     try:
-                        line = stdout_queue.get_nowait()
-                        if line.startswith(self.TIME_MS_PREFIX):
-                            try:
-                                value = int(line.split("=")[1]) / 1_000_000
-                                if value <= self._duration_secs:
-                                    progress_bar.update(task_id, completed=value)
-                            except ValueError:
-                                pass
-                    except Empty:
+                        value = int(line.split("=")[1]) / 1_000_000
+                        if value <= self._duration_secs:
+                            progress_bar.update(task_id, completed=value)
+                    except ValueError:
                         pass
-
                 # stderr
                 if not stderr_queue.empty():
-                    try:
-                        self._process_stderr(stderr_queue.get_nowait())
-                    except Empty:
-                        pass
+                    self._process_stderr(stderr_queue.get())
+
+            if process.returncode == 0 and task_id is not None:
+                progress_bar.update(task_id, completed=self._duration_secs)
+                progress_bar.columns = (
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TaskProgressColumn(),
+                )
+                progress_bar.update(
+                    task_id,
+                    description=f"✓ Processed {self._input_filepath.name}",
+                )
 
             # Process remaining stderr
             while not stderr_queue.empty():
-                try:
-                    self._process_stderr(stderr_queue.get_nowait())
-                except Empty:
-                    break
-
-            progress_bar.columns = (
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-            )
+                self._process_stderr(stderr_queue.get())
 
             if process.returncode != 0:
                 progress_bar.update(
@@ -208,11 +203,6 @@ class FfmpegProcess:
                     description=f"The FFmpeg process did not complete successfully. Check out {self._ffmpeg_log_file} for details.",
                 )
                 return 1
-
-            progress_bar.update(
-                task_id,
-                description=f"✓ Processed {self._input_filepath.name}",
-            )
 
             return 0
 
@@ -230,33 +220,32 @@ class FfmpegProcess:
             )
 
         while process.poll() is None:
+            # FFmpeg only updates encoding progress/statistics every 0.5 seconds
+            sleep(0.5)
             # stdout
             if pbar and not stdout_queue.empty():
+                line = stdout_queue.get()
                 try:
-                    line = stdout_queue.get_nowait()
-                    if line.startswith(self.TIME_MS_PREFIX):
-                        try:
-                            value = int(line.split("=")[1]) / 1_000_000
-                            if value <= self._duration_secs:
-                                pbar.n = value
-                                pbar.refresh()
-                        except ValueError:
-                            pass
-                except Empty:
+                    value = int(line.split("=")[1]) / 1_000_000
+                    if value <= self._duration_secs:
+                        pbar.n = value
+                        pbar.refresh()
+                except ValueError:
                     pass
             # stderr
             if not stderr_queue.empty():
-                try:
-                    self._process_stderr(stderr_queue.get_nowait())
-                except Empty:
-                    pass
+                self._process_stderr(stderr_queue.get())
+
+        if process.returncode == 0 and pbar:
+            pbar.n = self._duration_secs
+            pbar.set_description(f"✓ Processed {self._input_filepath.name}")
+
+        if pbar:
+            pbar.close()
 
         # Process remaining stderr
         while not stderr_queue.empty():
-            try:
-                self._process_stderr(stderr_queue.get_nowait())
-            except Empty:
-                break
+            self._process_stderr(stderr_queue.get())
 
         if process.returncode != 0:
             print(
@@ -264,13 +253,13 @@ class FfmpegProcess:
             )
             return 1
 
-        pbar.set_description(f"✓ Processed {self._input_filepath.name}")
-        if pbar:
-            pbar.close()
-
         return 0
 
-    def run(self, print_command: bool = False, use_tqdm: bool = False) -> int:
+    def run(
+        self,
+        print_command: bool = False,
+        use_tqdm: bool = False,
+    ) -> int:
         if hasattr(self, "return_code") and self.return_code != 0:
             return 1
 
