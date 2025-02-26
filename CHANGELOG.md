@@ -88,3 +88,6 @@
     - Leave FFmpeg encoding progress/statistics update frequency as the default of 2 times per second, instead of 10 times per second.
     - Add a 0.5 seconds sleep at the start of the `while process.poll() is None` loop to eliminate unnecessary iterations of this loop.
     - Use `Queue.get()` instead of `Queue.get_nowait()`. Non-blocking queue item retrieval is not needed due to the `not stdout_queue.empty()` and `not stderr_queue.empty()` checks. Because of these checks, `get()` will never block as we only run this code if the queue is not empty. Refer to issue #29 for context.
+
+[26/02/2025]
+- [v3.2.2] No longer create threads to read FFmpeg stdout and stderr.

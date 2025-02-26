@@ -5,8 +5,6 @@ import psutil
 from queue import Queue
 import shutil
 import subprocess
-from threading import Thread
-from time import sleep
 from typing import List, Optional, Union
 
 from ffmpeg import probe
@@ -35,24 +33,6 @@ class FfmpegLogLevel(Enum):
 
 
 class FfmpegProcess:
-    @staticmethod
-    def _read_pipe(pipe: subprocess.PIPE, queue: Queue, stdout: bool = False) -> None:
-        """Read from pipe and put lines into queue."""
-        try:
-            with pipe:
-                for line in iter(pipe.readline, ""):
-                    line = line.strip()
-                    if line:
-                        if stdout:
-                            if line.startswith("out_time_ms="):
-                                queue.put(line)
-                        else:
-                            queue.put(line)
-        except (IOError, ValueError) as e:
-            print(f"Error reading pipe: {e}")
-        finally:
-            pipe.close()
-
     @classmethod
     def _validate_command(cls, command: List[str]) -> bool:
         if not shutil.which("ffmpeg"):
@@ -112,9 +92,6 @@ class FfmpegProcess:
         self._print_detected_duration = print_detected_duration
         self._print_stderr_new_line = print_stderr_new_line
 
-        with open(self._ffmpeg_log_file, "w"):
-            pass
-
         try:
             probe_data = probe(self._input_filepath)
             self._duration_secs = float(probe_data["format"]["duration"])
@@ -136,18 +113,7 @@ class FfmpegProcess:
 
         self.return_code = 0
 
-    def _process_stderr(self, stderr: str) -> None:
-        if self._duration_secs is None:
-            print(stderr, end="\n" if self._print_stderr_new_line else "\r", flush=True)
-
-        try:
-            with open(self._ffmpeg_log_file, "a", encoding="utf-8") as f:
-                f.write(f"{stderr}\n")
-        except IOError as e:
-            print(f"Error writing to log file: {e}")
-            self.return_code = 1
-
-    def _use_rich(self, process, stdout_queue, stderr_queue) -> int:
+    def _use_rich(self, process) -> int:
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -165,37 +131,32 @@ class FfmpegProcess:
                     total=self._duration_secs,
                 )
 
-            while process.poll() is None:
-                # FFmpeg only updates encoding progress/statistics every 0.5 seconds
-                sleep(0.5)
-                # stdout
-                if task_id is not None and not stdout_queue.empty():
-                    line = stdout_queue.get()
+            if task_id is not None:
+                while process.poll() is None:
+                    stdout = process.stdout.readline()
+
+                    if not stdout.startswith("out_time_ms"):
+                        continue
+
                     try:
-                        value = int(line.split("=")[1]) / 1_000_000
+                        value = int(stdout.split("=")[1]) / 1_000_000
+                    except ValueError:
+                        continue
+                    else:
                         if value <= self._duration_secs:
                             progress_bar.update(task_id, completed=value)
-                    except ValueError:
-                        pass
-                # stderr
-                if not stderr_queue.empty():
-                    self._process_stderr(stderr_queue.get())
 
-            if process.returncode == 0 and task_id is not None:
-                progress_bar.update(task_id, completed=self._duration_secs)
-                progress_bar.columns = (
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TaskProgressColumn(),
-                )
-                progress_bar.update(
-                    task_id,
-                    description=f"✓ Processed {self._input_filepath.name}",
-                )
-
-            # Process remaining stderr
-            while not stderr_queue.empty():
-                self._process_stderr(stderr_queue.get())
+                if process.returncode == 0:
+                    progress_bar.update(task_id, completed=self._duration_secs)
+                    progress_bar.columns = (
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TaskProgressColumn(),
+                    )
+                    progress_bar.update(
+                        task_id,
+                        description=f"✓ Processed {self._input_filepath.name}",
+                    )
 
             if process.returncode != 0:
                 progress_bar.update(
@@ -206,12 +167,12 @@ class FfmpegProcess:
 
             return 0
 
-    def _use_tqdm(self, process, stdout_queue, stderr_queue) -> int:
-        pbar = None
+    def _use_tqdm(self, process) -> int:
+        progress_bar = None
         width, _ = os.get_terminal_size()
 
         if self._duration_secs:
-            pbar = tqdm(
+            progress_bar = tqdm(
                 total=self._duration_secs,
                 desc=f"Processing {self._input_filepath.name}",
                 ncols=80,
@@ -219,33 +180,27 @@ class FfmpegProcess:
                 bar_format="{desc} {bar} {percentage:.1f}% {elapsed} {remaining}",
             )
 
-        while process.poll() is None:
-            # FFmpeg only updates encoding progress/statistics every 0.5 seconds
-            sleep(0.5)
-            # stdout
-            if pbar and not stdout_queue.empty():
-                line = stdout_queue.get()
+        if progress_bar is not None:
+            while process.poll() is None:
+                stdout = process.stdout.readline()
+
+                if not stdout.startswith("out_time_ms"):
+                    continue
+
                 try:
-                    value = int(line.split("=")[1]) / 1_000_000
-                    if value <= self._duration_secs:
-                        pbar.n = value
-                        pbar.refresh()
+                    value = int(stdout.split("=")[1]) / 1_000_000
                 except ValueError:
-                    pass
-            # stderr
-            if not stderr_queue.empty():
-                self._process_stderr(stderr_queue.get())
+                    continue
+                else:
+                    if value <= self._duration_secs:
+                        progress_bar.n = value
+                        progress_bar.refresh()
 
-        if process.returncode == 0 and pbar:
-            pbar.n = self._duration_secs
-            pbar.set_description(f"✓ Processed {self._input_filepath.name}")
+            if process.returncode == 0:
+                progress_bar.n = self._duration_secs
+                progress_bar.set_description(f"✓ Processed {self._input_filepath.name}")
 
-        if pbar:
-            pbar.close()
-
-        # Process remaining stderr
-        while not stderr_queue.empty():
-            self._process_stderr(stderr_queue.get())
+            progress_bar.close()
 
         if process.returncode != 0:
             print(
@@ -288,38 +243,26 @@ class FfmpegProcess:
             self._ffmpeg_command = " ".join(self._ffmpeg_command)
 
         try:
-            process = subprocess.Popen(
-                self._ffmpeg_command,
-                shell=isinstance(self._ffmpeg_command, str),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-                if os.name == "nt"
-                else 0,
-            )
+            with open(self._ffmpeg_log_file, "w") as f:
+                process = subprocess.Popen(
+                    self._ffmpeg_command,
+                    shell=isinstance(self._ffmpeg_command, str),
+                    stdout=subprocess.PIPE,
+                    stderr=f,
+                    text=True,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    if os.name == "nt"
+                    else 0,
+                )
         except Exception as e:
             print(f"Error starting FFmpeg process: {e}")
             return 1
 
-        stdout_queue, stderr_queue = Queue(), Queue()
-        # Start stdout and stderr pipe readers
-        Thread(
-            target=self._read_pipe,
-            args=(process.stdout, stdout_queue, True),
-            daemon=True,
-        ).start()
-        Thread(
-            target=self._read_pipe,
-            args=(process.stderr, stderr_queue, False),
-            daemon=True,
-        ).start()
-
         try:
             if use_tqdm:
-                return self._use_tqdm(process, stdout_queue, stderr_queue)
+                return self._use_tqdm(process)
             else:
-                return self._use_rich(process, stdout_queue, stderr_queue)
+                return self._use_rich(process)
         except KeyboardInterrupt:
             try:
                 psutil.Process(process.pid).terminate()
