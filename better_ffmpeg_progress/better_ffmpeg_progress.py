@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 import psutil
 import shutil
-from signal import CTRL_BREAK_EVENT
 import subprocess
 from typing import List, Optional, Union
 
@@ -324,6 +323,8 @@ class FfmpegProcess:
                     # If running under a shell, terminate shell first
                     proc.terminate()
                 else:
+                    from signal import CTRL_BREAK_EVENT
+
                     # Send CTRL_BREAK_EVENT to entire process group
                     os.kill(self._process.pid, CTRL_BREAK_EVENT)
             # Unix

@@ -98,3 +98,5 @@
     - Performance optimisations.
 - [v3.2.4]
     - Fix AttributeError.
+- [v3.2.5]
+    - Fix issue #30
