@@ -91,3 +91,8 @@
 
 [26/02/2025]
 - [v3.2.2] No longer create threads to read FFmpeg stdout and stderr.
+
+[27/02/2025]
+- [v3.2.3]
+    - No longer require ffmpeg-python, use ffprobe directly.
+    - Performance optimisations.
