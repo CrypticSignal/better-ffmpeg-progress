@@ -96,3 +96,5 @@
 - [v3.2.3]
     - No longer require ffmpeg-python, use ffprobe directly.
     - Performance optimisations.
+- [v3.2.4]
+    - Fix AttributeError.

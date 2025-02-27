@@ -133,7 +133,7 @@ class FfmpegProcess:
         self._input_filepath = Path(command[input_idx])
         self._output_filepath = Path(command[-1])
         self._ffmpeg_log_level = (
-            ffmpeg_log_level.value if ffmpeg_log_level else FfmpegLogLevel.VERBOSE.value
+            ffmpeg_log_level if ffmpeg_log_level else FfmpegLogLevel.VERBOSE.value
         )
         self._ffmpeg_log_file = Path(
             ffmpeg_log_file or f"{self._input_filepath.name}_log.txt"
