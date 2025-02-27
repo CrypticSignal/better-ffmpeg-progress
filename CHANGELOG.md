@@ -100,3 +100,6 @@
     - Fix AttributeError.
 - [v3.2.5]
     - Fix issue #30
+- [v3.2.6]
+    - Simplify the `_should_overwrite` method.
+    - Refactor the `_terminate` method.

@@ -61,27 +61,26 @@ class FfmpegProcess:
         return True
 
     def _should_overwrite(self):
-        if self._output_filepath.exists() and "-y" not in self._ffmpeg_command:
-            try:
-                if (
-                    input(
-                        f"{self._output_filepath} already exists. Overwrite? [Y/N]: "
-                    ).lower()
-                    != "y"
-                ):
-                    print(
-                        "FFmpeg process cancelled. Output file exists and overwrite declined."
-                    )
-                    return False
-            except EOFError:
-                print("Input error. FFmpeg process cancelled.")
+        try:
+            if (
+                input(
+                    f"{self._output_filepath} already exists. Overwrite? [Y/N]: "
+                ).lower()
+                != "y"
+            ):
+                print(
+                    "FFmpeg process cancelled. Output file exists and overwrite declined."
+                )
                 return False
-            except KeyboardInterrupt:
-                print("[KeyboardInterrupt] FFmpeg process cancelled.")
-                return False
+        except EOFError:
+            print("Input error. FFmpeg process cancelled.")
+            return False
+        except KeyboardInterrupt:
+            print("[KeyboardInterrupt] FFmpeg process cancelled.")
+            return False
 
-            self._ffmpeg_command.insert(1, "-y")
-            return True
+        self._ffmpeg_command.insert(1, "-y")
+        return True
 
     @staticmethod
     def _get_duration(filepath: Path) -> Optional[float]:
@@ -155,9 +154,9 @@ class FfmpegProcess:
         ]
         self._ffmpeg_command.extend(command[1:])
 
-        if not self._should_overwrite():
-            self._return_code = 1
-            return
+        if self._output_filepath.exists() and "-y" not in self._ffmpeg_command:
+            if not self._should_overwrite():
+                self._return_code = 1
 
     def _use_rich(self, process) -> int:
         task_id = None
@@ -301,13 +300,10 @@ class FfmpegProcess:
                 else self._use_rich(self._process)
             )
         except KeyboardInterrupt:
-            print("\n[KeyboardInterrupt] Terminating FFmpeg process...")
+            print("\n[KeyboardInterrupt] Terminating the FFmpeg process...")
             self._terminate()
-            print("Done!")
+            print("Exiting Better FFmpeg Progress.")
             return 1
-        finally:
-            if self._process and self._process.poll() is None:
-                self._terminate()
 
     def _terminate(self):
         if not self._process or self._process.poll() is not None:
@@ -315,37 +311,60 @@ class FfmpegProcess:
 
         try:
             proc = psutil.Process(self._process.pid)
-            children = proc.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            return
 
-            # Windows. Use CTRL_BREAK_EVENT to terminate entire process group
-            if os.name == "nt":
-                if self._shell_needed:
-                    # If running under a shell, terminate shell first
-                    proc.terminate()
-                else:
-                    from signal import CTRL_BREAK_EVENT
+        children = proc.children(recursive=True)
+        if children:
+            print(f"Found {len(children)} child process(es).")
 
-                    # Send CTRL_BREAK_EVENT to entire process group
-                    os.kill(self._process.pid, CTRL_BREAK_EVENT)
-            # Unix
-            else:
-                for child in children:
-                    try:
-                        child.terminate()
-                    except psutil.NoSuchProcess:
-                        pass
+        # Windows
+        if os.name == "nt":
+            try:
+                # On Windows, terminate() and kill() are equivalent
                 proc.terminate()
+            except psutil.NoSuchProcess:
+                return
+            except psutil.AccessDenied:
+                print("Permission error when trying to terminate the FFmpeg process.")
+            return
 
-            # Wait up to 1 second for processes to exit gracefully
-            gone, still_alive = psutil.wait_procs(children + [proc], timeout=1)
+        # Unix/Linux/macOS
+        from signal import SIGTERM, SIGKILL
 
-            # Force kill any remaining processes
-            for p in still_alive:
+        try:
+            pgid = os.getpgid(self._process.pid)
+            print(f"Sending SIGTERM to process group {pgid}...")
+            os.killpg(pgid, SIGTERM)
+        except OSError:
+            print("Failed to send SIGTERM to process group.")
+
+        try:
+            proc.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            print(
+                "The FFmpeg process did not exit within 0.5s after SIGTERM, sending SIGKILL..."
+            )
+            try:
+                os.killpg(pgid, SIGKILL)
+            except OSError:
+                print("Failed to send SIGKILL to process group.")
+
+        for child in children:
+            if child.is_running():
+                print(f"Force killing child process {child.pid}...")
                 try:
-                    p.kill()
+                    child.kill()
                 except psutil.NoSuchProcess:
                     pass
+                except psutil.AccessDenied:
+                    print("Permission error when trying to kill the FFmpeg process.")
 
-        except (psutil.NoSuchProcess, ProcessLookupError, KeyboardInterrupt):
-            # As a last resort, force kill the main process
-            self._process.kill()
+        if self._process.poll() is None:
+            print("Force killing the FFmpeg process...")
+            try:
+                proc.kill()
+            except psutil.NoSuchProcess:
+                pass
+            except psutil.AccessDenied:
+                print("Permission error when trying to kill the FFmpeg process.")
