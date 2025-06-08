@@ -103,3 +103,10 @@
 - [v3.2.6]
     - Simplify the `_should_overwrite` method.
     - Refactor the `_terminate` method.
+
+[08/06/2025]
+- [v4.0.0] 
+    - Make `return_code` a property of `FfmpegProcess`
+    - Make `use_tqdm` a property of `FfmpegProcess`
+    - Create new files to separate some methods for easier maintainability.
+    - Add a file (test.py) for testing.

@@ -1,112 +1,57 @@
-from enum import Enum
 import os
 from pathlib import Path
-import psutil
-import shutil
 import subprocess
+from sys import exit
 from typing import List, Optional, Union
 
-from rich.progress import (
-    Progress,
-    TextColumn,
-    BarColumn,
-    TaskProgressColumn,
-    TimeRemainingColumn,
-    TimeElapsedColumn,
+from .enums import FfmpegLogLevel
+from .exceptions import (
+    FfmpegProcessError,
+    FfmpegCommandError,
+    FfmpegProcessUserCancelledError,
+    FfmpegProcessInterruptedError,
 )
-from tqdm import tqdm
+from .utils import (
+    validate_ffmpeg_command,
+    get_media_duration,
+    check_shell_needed_for_command,
+)
+from .terminate_process import terminate_ffmpeg_process
+from .progress_bars import use_rich, use_tqdm
 
-OUT_TIME_PREFIX = b"out_time_"
-# Convert microseconds to seconds
-MULTIPLIER = 1e-6
-
-
-class FfmpegLogLevel(Enum):
-    QUIET = "quiet"
-    PANIC = "panic"
-    FATAL = "fatal"
-    ERROR = "error"
-    WARNING = "warning"
-    INFO = "info"
-    VERBOSE = "verbose"
-    DEBUG = "debug"
-    TRACE = "trace"
+_FFMPEG_OVERWRITE_FLAG = "-y"
 
 
 class FfmpegProcess:
-    @staticmethod
-    def _validate_command(command: List[str]) -> bool:
-        if not shutil.which("ffmpeg"):
-            print("Error: FFmpeg executable not found in PATH")
-            return False
-
-        if "-i" not in command:
-            print("Error: FFmpeg command must include '-i'")
-            return False
-
-        input_idx = command.index("-i") + 1
-        if input_idx >= len(command):
-            print("Error: No input file specified after -i")
-            return False
-
-        input_file = Path(command[input_idx])
-        if not input_file.exists():
-            print(f"Error: Input file not found: {input_file}")
-            return False
-
-        if input_idx + 1 >= len(command):
-            print("Error: No output file specified")
-            return False
-
-        return True
-
-    def _should_overwrite(self):
+    def _handle_overwrite_prompt(self) -> None:
+        """
+        Handles the logic for overwriting an existing output file.
+        Modifies self._ffmpeg_command to include -y if overwrite is confirmed.
+        Raises FfmpegProcessUserCancelledError or FfmpegProcessInterruptedError if not proceeding.
+        """
         try:
-            if (
+            answer = (
                 input(
-                    f"{self._output_filepath} already exists. Overwrite? [Y/N]: "
-                ).lower()
-                != "y"
-            ):
-                print(
+                    f"Output file {self._output_filepath} already exists. Overwrite? [y/N]: "
+                )
+                .strip()
+                .lower()
+            )
+            if answer == "y":
+                # Insert -y
+                self._ffmpeg_command.insert(1, _FFMPEG_OVERWRITE_FLAG)
+            else:
+                raise FfmpegProcessUserCancelledError(
                     "FFmpeg process cancelled. Output file exists and overwrite declined."
                 )
-                return False
-        except EOFError:
-            print("Input error. FFmpeg process cancelled.")
-            return False
-        except KeyboardInterrupt:
-            print("[KeyboardInterrupt] FFmpeg process cancelled.")
-            return False
-
-        self._ffmpeg_command.insert(1, "-y")
-        return True
-
-    @staticmethod
-    def _get_duration(filepath: Path) -> Optional[float]:
-        try:
-            output = subprocess.check_output(
-                [
-                    "ffprobe",
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "default=noprint_wrappers=1:nokey=1",
-                    "-i",
-                    str(filepath),
-                ],
-                text=True,
-            )
-            return float(output)
-        except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
-            return None
-
-    @staticmethod
-    def _check_shell_needed(command):
-        shell_operators = {"|", ">", "<", ">>", "&&", "||"}
-        return any(op in item for item in command for op in shell_operators)
+        except KeyboardInterrupt as e:
+            raise FfmpegProcessInterruptedError(
+                "[KeyboardInterrupt] FFmpeg process cancelled during overwrite prompt."
+            ) from e
+        except EOFError as e:
+            raise FfmpegProcessInterruptedError(
+                "Input error (EOF) during overwrite prompt. FFmpeg process cancelled."
+            ) from e
 
     def __init__(
         self,
@@ -114,257 +59,142 @@ class FfmpegProcess:
         ffmpeg_log_level: Optional[Union[FfmpegLogLevel, str]] = None,
         ffmpeg_log_file: Optional[Union[str, Path]] = None,
         print_detected_duration: bool = False,
-        print_stderr_new_line: bool = False,
     ):
-        if not self._validate_command(command):
-            self._return_code = 1
-            return
+        # Raises FfmpegCommandError if the command is invalid
+        validate_ffmpeg_command(command)
 
-        if ffmpeg_log_level and ffmpeg_log_level not in FfmpegLogLevel:
-            print(
-                f"ffmpeg_log_level must be a lowercase variant of: {list(FfmpegLogLevel.__members__)}"
+        ffmpeg_log_level_val: str
+
+        if ffmpeg_log_level is None:
+            ffmpeg_log_level_val = FfmpegLogLevel.VERBOSE.value
+        elif isinstance(ffmpeg_log_level, FfmpegLogLevel):
+            ffmpeg_log_level_val = ffmpeg_log_level.value
+        elif isinstance(ffmpeg_log_level, str):
+            try:
+                ffmpeg_log_level_val = FfmpegLogLevel(ffmpeg_log_level.lower()).value
+            except ValueError:
+                valid_levels = [e.value for e in FfmpegLogLevel]
+                raise FfmpegCommandError(
+                    f"Invalid ffmpeg_log_level string: '{ffmpeg_log_level}'. "
+                    f"Must be one of {valid_levels} (case-insensitive)."
+                )
+        else:
+            raise TypeError(
+                f"ffmpeg_log_level must be an FfmpegLogLevel enum instance, a string, or None, "
+                f"not {type(ffmpeg_log_level).__name__}"
             )
-            self._return_code = 1
-            return
+        self._ffmpeg_log_level_val = ffmpeg_log_level_val
 
-        input_idx = command.index("-i") + 1
-        self._input_filepath = Path(command[input_idx])
+        input_file_index = command.index("-i")
+        input_file_path_str = command[input_file_index + 1]
+        self._input_filepath = Path(input_file_path_str)
+        # Assumes last argument is output
         self._output_filepath = Path(command[-1])
-        self._ffmpeg_log_level = (
-            ffmpeg_log_level if ffmpeg_log_level else FfmpegLogLevel.VERBOSE.value
-        )
+
         self._ffmpeg_log_file = Path(
-            ffmpeg_log_file or f"{self._input_filepath.name}_log.txt"
+            ffmpeg_log_file or f"{self._input_filepath.name}_ffmpeg_log.txt"
         )
         self._print_detected_duration = print_detected_duration
-        self._print_stderr_new_line = print_stderr_new_line
-        self._duration_secs = self._get_duration(self._input_filepath)
+        self._duration_secs = get_media_duration(input_file_path_str)
 
         if self._print_detected_duration and self._duration_secs is not None:
-            print(f"Detected duration: {self._duration_secs} seconds")
+            print(f"Detected duration: {self._duration_secs:.2f} seconds")
+        elif self._print_detected_duration and self._duration_secs is None:
+            print(
+                "Could not detect duration. Progress bar may not show time remaining."
+            )
 
         self._ffmpeg_command = [
             command[0],
             "-hide_banner",
             "-loglevel",
-            self._ffmpeg_log_level,
+            self._ffmpeg_log_level_val,
             "-progress",
-            "pipe:1",
+            "pipe:1",  # stdout
             "-nostats",
         ]
         self._ffmpeg_command.extend(command[1:])
 
-        if self._output_filepath.exists() and "-y" not in self._ffmpeg_command:
-            if not self._should_overwrite():
-                self._return_code = 1
+        is_overwrite_in_user_command = any(
+            arg == _FFMPEG_OVERWRITE_FLAG for arg in command[1:]
+        )
 
-    def _use_rich(self, process) -> int:
-        task_id = None
+        if self._output_filepath.exists() and not is_overwrite_in_user_command:
+            self._handle_overwrite_prompt()
 
-        with Progress(
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            TimeRemainingColumn(compact=True),
-            refresh_per_second=2,
-        ) as progress_bar:
-            if self._duration_secs:
-                task_id = progress_bar.add_task(
-                    f"Processing {self._input_filepath.name}",
-                    total=self._duration_secs,
-                )
-
-                update_progress = progress_bar.update
-                duration = self._duration_secs
-
-                for line in process.stdout:
-                    if line[:9] == OUT_TIME_PREFIX:
-                        value = line[12:-1]
-                        # Check if the first byte is a digit
-                        try:
-                            if 48 <= value[0] <= 57:
-                                value_int = int(value) * MULTIPLIER
-                                if value_int <= duration:
-                                    update_progress(task_id, completed=value_int)
-                        except (IndexError, ValueError):
-                            pass
-
-            process.wait()
-
-            if process.returncode == 0 and task_id is not None:
-                update_progress(task_id, completed=duration)
-                progress_bar.columns = (
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TaskProgressColumn(),
-                )
-                update_progress(
-                    task_id,
-                    description=f"✓ Processed {self._input_filepath.name}",
-                )
-
-            if process.returncode != 0:
-                if task_id is not None:
-                    progress_bar.update(
-                        task_id,
-                        description=f"FFmpeg process failed. Check out {self._ffmpeg_log_file} for details.",
-                    )
-                return 1
-
-            return 0
-
-    def _use_tqdm(self, process) -> int:
-        progress_bar = None
-
-        try:
-            width = os.get_terminal_size().columns
-        except OSError:
-            width = 80
-
-        if self._duration_secs:
-            progress_bar = tqdm(
-                mininterval=0.5,
-                total=self._duration_secs,
-                desc=f"Processing {self._input_filepath.name}",
-                ncols=80,
-                dynamic_ncols=True if width < 80 else False,
-                bar_format="{desc} {bar} {percentage:.1f}% {elapsed} {remaining}",
-            )
-
-            duration = self._duration_secs
-
-            for line in process.stdout:
-                if line[:9] == OUT_TIME_PREFIX:
-                    value = line[12:-1]
-                    try:
-                        # Check if the first byte is a digit
-                        if 48 <= value[0] <= 57:
-                            value_int = int(value) * MULTIPLIER
-                            if value_int <= duration:
-                                progress_bar.n = value_int
-                                progress_bar.refresh()
-                    except (IndexError, ValueError):
-                        pass
-
-        process.wait()
-
-        if process.returncode == 0 and progress_bar is not None:
-            progress_bar.n = duration
-            progress_bar.set_description(f"✓ Processed {self._input_filepath.name}")
-            progress_bar.close()
-
-        if process.returncode != 0:
-            print(
-                f"FFmpeg process failed. Check out {self._ffmpeg_log_file} for details."
-            )
-            return 1
-
-        return 0
+        self._process: Optional[subprocess.Popen] = None
+        self._return_code: Optional[int] = None
+        self.use_tqdm: bool = False
 
     def run(
         self,
         print_command: bool = False,
-        use_tqdm: bool = False,
     ) -> int:
-        if hasattr(self, "_return_code") and self._return_code != 0:
-            return 1
-
         if print_command:
-            print(f"Executing: {' '.join(self._ffmpeg_command)}")
+            cmd_str = (
+                " ".join(self._ffmpeg_command)
+                if isinstance(self._ffmpeg_command, list)
+                else self._ffmpeg_command
+            )
+            print(f"Executing: {cmd_str}")
 
-        self._shell_needed = self._check_shell_needed(self._ffmpeg_command)
+        self._shell_needed = check_shell_needed_for_command(
+            self._ffmpeg_command
+            if isinstance(self._ffmpeg_command, list)
+            else [self._ffmpeg_command]
+        )
 
-        if self._shell_needed:
-            self._ffmpeg_command = " ".join(self._ffmpeg_command)
+        current_ffmpeg_command = self._ffmpeg_command
+        if self._shell_needed and isinstance(current_ffmpeg_command, list):
+            current_ffmpeg_command = " ".join(current_ffmpeg_command)
+
+        self._return_code = 1
 
         try:
-            with open(self._ffmpeg_log_file, "w") as f:
+            with open(self._ffmpeg_log_file, "w", encoding="utf-8") as f:
+                creationflags = 0
+
+                if os.name == "nt":
+                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+
                 self._process = subprocess.Popen(
-                    self._ffmpeg_command,
+                    current_ffmpeg_command,
                     shell=self._shell_needed,
                     stdout=subprocess.PIPE,
                     stderr=f,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-                    if os.name == "nt"
-                    else 0,
+                    creationflags=creationflags,
                 )
         except Exception as e:
-            print(f"Error starting FFmpeg process: {e}")
-            return 1
+            # self._return_code remains None as the process didn't start
+            raise FfmpegProcessError(f"Error starting FFmpeg process: {e}") from e
 
         try:
-            return (
-                self._use_tqdm(self._process)
-                if use_tqdm
-                else self._use_rich(self._process)
-            )
+            if self.use_tqdm:
+                self._return_code = use_tqdm(self, self._process)
+            else:
+                self._return_code = use_rich(self, self._process)
         except KeyboardInterrupt:
-            print("\n[KeyboardInterrupt] Terminating the FFmpeg process...")
             self._terminate()
-            print("Exiting Better FFmpeg Progress.")
-            return 1
+            self._return_code = 1
+        finally:
+            if self._process:
+                self._return_code = self._process.returncode
+
+                if self._process.stdout:
+                    self._process.stdout.close()
+
+        return self._return_code
 
     def _terminate(self):
-        if not self._process or self._process.poll() is not None:
-            return
+        if self._process:
+            terminate_ffmpeg_process(self._process)
+        else:
+            exit()
 
-        try:
-            proc = psutil.Process(self._process.pid)
-        except (psutil.NoSuchProcess, psutil.ZombieProcess):
-            return
-
-        children = proc.children(recursive=True)
-        if children:
-            print(f"Found {len(children)} child process(es).")
-
-        # Windows
-        if os.name == "nt":
-            try:
-                # On Windows, terminate() and kill() are equivalent
-                proc.terminate()
-            except psutil.NoSuchProcess:
-                return
-            except psutil.AccessDenied:
-                print("Permission error when trying to terminate the FFmpeg process.")
-            return
-
-        # Unix/Linux/macOS
-        from signal import SIGTERM, SIGKILL
-
-        try:
-            pgid = os.getpgid(self._process.pid)
-            print(f"Sending SIGTERM to process group {pgid}...")
-            os.killpg(pgid, SIGTERM)
-        except OSError:
-            print("Failed to send SIGTERM to process group.")
-
-        try:
-            proc.wait(timeout=0.5)
-        except subprocess.TimeoutExpired:
-            print(
-                "The FFmpeg process did not exit within 0.5s after SIGTERM, sending SIGKILL..."
-            )
-            try:
-                os.killpg(pgid, SIGKILL)
-            except OSError:
-                print("Failed to send SIGKILL to process group.")
-
-        for child in children:
-            if child.is_running():
-                print(f"Force killing child process {child.pid}...")
-                try:
-                    child.kill()
-                except psutil.NoSuchProcess:
-                    pass
-                except psutil.AccessDenied:
-                    print("Permission error when trying to kill the FFmpeg process.")
-
-        if self._process.poll() is None:
-            print("Force killing the FFmpeg process...")
-            try:
-                proc.kill()
-            except psutil.NoSuchProcess:
-                pass
-            except psutil.AccessDenied:
-                print("Permission error when trying to kill the FFmpeg process.")
+    @property
+    def return_code(self) -> Optional[int]:
+        """
+        The return code of the FFmpeg process.
+        None if the process has not started or failed to start.
+        """
+        return self._return_code

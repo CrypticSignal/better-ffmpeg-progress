@@ -35,13 +35,37 @@ pip install better-ffmpeg-progress --upgrade
 ## Usage
 Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()` or `subprocess.Popen()`.
 
-Here's a simple example:
+Example:
 ```py
-from better_ffmpeg_progress import FfmpegProcess
+from better_ffmpeg_progress import FfmpegProcess, FfmpegProcessError
 
-process = FfmpegProcess(["ffmpeg", "-i", "input.mp4", "-c:v", "libx265", "output.mp4"])
-# return_code will be 0 if the process completed successfully, otherwise it will be 1
-return_code = process.run()
+command = [
+    "ffmpeg",
+    "-i",
+    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-c:a",
+    "copy",
+    "-f",
+    "null",
+    "-",
+]
+
+try:
+    process = FfmpegProcess(command)
+    # Uncomment the line below if you want to use tqdm instead of rich for the progress bar
+    # process.use_tqdm = True
+
+    # Run the FFmpeg command and show a progress bar
+    process.run()
+    # The FFmpeg process failed if the return code is not 0
+    if process.return_code != 0:
+        pass
+except FfmpegProcessError as e:
+    print(f"An error occurred when running the better-ffmpeg-process package:\n{e}")
 ```
 ## Optional Arguments
 An instance of the `FfmpegProcess` class takes the following **optional** arguments:
@@ -53,4 +77,3 @@ An instance of the `FfmpegProcess` class takes the following **optional** argume
 
 The `run` method takes the following **optional** arguments:
 - `print_command` - Print the FFmpeg command being executed. Default: `False`
-- `use_tqdm` - Use [tqdm](https://github.com/tqdm/tqdm) instead of [Rich](https://github.com/Textualize/rich) for the progress bar. Default: `False`
