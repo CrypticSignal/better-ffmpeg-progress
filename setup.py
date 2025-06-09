@@ -13,7 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/CrypticSignal/better-ffmpeg-progress",
     packages=["better_ffmpeg_progress"],
-    install_requires=["psutil", "rich", "tqdm"],
+    install_requires=["psutil", "rich", "tqdm", "requests"],
     python_requires=">=3.7",
     keywords=["ffmpeg", "progress"],
     classifiers=[
