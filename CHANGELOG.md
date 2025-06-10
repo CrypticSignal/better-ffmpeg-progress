@@ -110,3 +110,6 @@
     - Make `use_tqdm` a property of `FfmpegProcess`
     - Create new files to separate some methods for easier maintainability.
     - Add a file (test.py) for testing.
+
+[10/06/2025]
+- [v4.0.1] Add `"requests"` to `install_requires`
