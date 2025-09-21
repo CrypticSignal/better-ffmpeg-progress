@@ -93,7 +93,8 @@ class FfmpegProcess:
 
         self._ffmpeg_log_file = Path(
             ffmpeg_log_file or f"{self._input_filepath.name}_ffmpeg_log.txt"
-        ) if type(ffmpeg_log_file) is os.PathLike else ffmpeg_log_file
+        ) if (isinstance(ffmpeg_log_file, os.PathLike) or ffmpeg_log_file is None) else ffmpeg_log_file
+
         self._print_detected_duration = print_detected_duration
         self._duration_secs = get_media_duration(input_file_path_str)
 
@@ -151,7 +152,7 @@ class FfmpegProcess:
         self._return_code = 1
 
         try:
-            if type(self._ffmpeg_log_file) is Path:
+            if isinstance(self._ffmpeg_log_file, (str, Path)):
                 with open(self._ffmpeg_log_file, "w", encoding="utf-8") as f:
                     creationflags = 0
 
