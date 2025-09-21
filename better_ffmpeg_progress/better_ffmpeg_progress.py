@@ -93,7 +93,7 @@ class FfmpegProcess:
 
         self._ffmpeg_log_file = Path(
             ffmpeg_log_file or f"{self._input_filepath.name}_ffmpeg_log.txt"
-        )
+        ) if type(ffmpeg_log_file) is os.PathLike else ffmpeg_log_file
         self._print_detected_duration = print_detected_duration
         self._duration_secs = get_media_duration(input_file_path_str)
 
@@ -151,7 +151,22 @@ class FfmpegProcess:
         self._return_code = 1
 
         try:
-            with open(self._ffmpeg_log_file, "w", encoding="utf-8") as f:
+            if type(self._ffmpeg_log_file) is Path:
+                with open(self._ffmpeg_log_file, "w", encoding="utf-8") as f:
+                    creationflags = 0
+
+                    if os.name == "nt":
+                        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+
+                    self._process = subprocess.Popen(
+                        current_ffmpeg_command,
+                        shell=self._shell_needed,
+                        stdout=subprocess.PIPE,
+                        stderr=f,
+                        creationflags=creationflags,
+                    )
+            else:
+                # Assume it's a valid file descriptor like sys.stdout
                 creationflags = 0
 
                 if os.name == "nt":
@@ -161,7 +176,7 @@ class FfmpegProcess:
                     current_ffmpeg_command,
                     shell=self._shell_needed,
                     stdout=subprocess.PIPE,
-                    stderr=f,
+                    stderr=self._ffmpeg_log_file,
                     creationflags=creationflags,
                 )
         except Exception as e:
