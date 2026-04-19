@@ -57,7 +57,7 @@ class FfmpegProcess:
         self,
         command: List[str],
         ffmpeg_log_level: Optional[Union[FfmpegLogLevel, str]] = None,
-        ffmpeg_log_file: Optional[Union[str, Path]] = None,
+        ffmpeg_log_file: Optional[Union[str, os.PathLike]] = None,
         print_detected_duration: bool = False,
     ):
         # Raises FfmpegCommandError if the command is invalid
@@ -91,9 +91,13 @@ class FfmpegProcess:
         # Assumes last argument is output
         self._output_filepath = Path(command[-1])
 
-        self._ffmpeg_log_file = Path(
-            ffmpeg_log_file or f"{self._input_filepath.name}_ffmpeg_log.txt"
-        )
+        if ffmpeg_log_file is None:
+            self._ffmpeg_log_file = Path(f"{self._input_filepath.name}_ffmpeg_log.txt")
+        elif isinstance(ffmpeg_log_file, (str, os.PathLike)):
+            self._ffmpeg_log_file = Path(ffmpeg_log_file)
+        else:
+            self._ffmpeg_log_file = ffmpeg_log_file
+
         self._print_detected_duration = print_detected_duration
         self._duration_secs = get_media_duration(input_file_path_str)
 
@@ -151,17 +155,26 @@ class FfmpegProcess:
         self._return_code = 1
 
         try:
-            with open(self._ffmpeg_log_file, "w", encoding="utf-8") as f:
-                creationflags = 0
+            creationflags = 0
+            # Windows
+            if os.name == "nt":
+                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
-                if os.name == "nt":
-                    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-
+            if isinstance(self._ffmpeg_log_file, Path):
+                with open(self._ffmpeg_log_file, "w", encoding="utf-8") as f:
+                    self._process = subprocess.Popen(
+                        current_ffmpeg_command,
+                        shell=self._shell_needed,
+                        stdout=subprocess.PIPE,
+                        stderr=f,
+                        creationflags=creationflags,
+                    )
+            else:
                 self._process = subprocess.Popen(
                     current_ffmpeg_command,
                     shell=self._shell_needed,
                     stdout=subprocess.PIPE,
-                    stderr=f,
+                    stderr=self._ffmpeg_log_file,
                     creationflags=creationflags,
                 )
         except Exception as e:
