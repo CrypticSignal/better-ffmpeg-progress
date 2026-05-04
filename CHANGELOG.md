@@ -153,3 +153,6 @@
   - `process.run()` no longer returns the return code.
   - If the FFmpeg process fails, raise `FfmpegProcessError`
   - Do not raise `FfmpegProcessError` on `KeyboardInterrupt`
+
+- [v5.1.0]
+  - Raise `ProgressBarError` in `progress_bars.py` instead of simply printing an error message.
