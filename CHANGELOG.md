@@ -145,3 +145,11 @@
 [19/04/2026]
 
 - [v4.1.0] Allow `self._ffmpeg_log_file` to be a file-like object.
+
+[04/05/2026]
+
+- [v5.0.0] 
+  - Removed the `return_code` property from `FfmpegProcess`
+  - `process.run()` no longer returns the return code.
+  - If the FFmpeg process fails, raise `FfmpegProcessError`
+  - Do not raise `FfmpegProcessError` on `KeyboardInterrupt`

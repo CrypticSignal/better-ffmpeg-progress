@@ -196,6 +196,8 @@ def terminate_ffmpeg_process(process: Optional[subprocess.Popen]):
     if not process or process.poll() is not None:
         return
 
+    print("[KeyboardInterrupt] Terminating the FFmpeg process...")
+
     original_pid = process.pid
 
     parent_ps_proc: Optional[psutil.Process] = None
@@ -218,8 +220,6 @@ def terminate_ffmpeg_process(process: Optional[subprocess.Popen]):
             except Exception as popen_term_err:
                 print(f"Error during fallback Popen termination: {popen_term_err}")
         return
-
-    print("[better-ffmpeg-progress] Terminating the FFmpeg process...")
 
     if parent_ps_proc:
         _terminate_children_processes(parent_ps_proc)

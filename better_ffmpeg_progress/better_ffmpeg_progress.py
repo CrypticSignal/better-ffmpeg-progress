@@ -127,13 +127,12 @@ class FfmpegProcess:
             self._handle_overwrite_prompt()
 
         self._process: Optional[subprocess.Popen] = None
-        self._return_code: Optional[int] = None
         self.use_tqdm: bool = False
 
     def run(
         self,
         print_command: bool = False,
-    ) -> int:
+    ) -> None:
         if print_command:
             cmd_str = (
                 " ".join(self._ffmpeg_command)
@@ -151,8 +150,6 @@ class FfmpegProcess:
         current_ffmpeg_command = self._ffmpeg_command
         if self._shell_needed and isinstance(current_ffmpeg_command, list):
             current_ffmpeg_command = " ".join(current_ffmpeg_command)
-
-        self._return_code = 1
 
         try:
             creationflags = 0
@@ -178,25 +175,24 @@ class FfmpegProcess:
                     creationflags=creationflags,
                 )
         except Exception as e:
-            # self._return_code remains None as the process didn't start
             raise FfmpegProcessError(f"Error starting FFmpeg process: {e}") from e
 
+        user_interrupted = False
         try:
             if self.use_tqdm:
-                self._return_code = use_tqdm(self, self._process)
+                use_tqdm(self, self._process)
             else:
-                self._return_code = use_rich(self, self._process)
+                use_rich(self, self._process)
         except KeyboardInterrupt:
+            user_interrupted = True
             self._terminate()
-            self._return_code = 1
         finally:
             if self._process:
-                self._return_code = self._process.returncode
-
                 if self._process.stdout:
                     self._process.stdout.close()
 
-        return self._return_code
+        if not user_interrupted and self._process and self._process.returncode != 0:
+            raise FfmpegProcessError(f"FFmpeg process failed. Return code: {self._process.returncode}")
 
     def _terminate(self):
         if self._process:
@@ -204,10 +200,3 @@ class FfmpegProcess:
         else:
             exit()
 
-    @property
-    def return_code(self) -> Optional[int]:
-        """
-        The return code of the FFmpeg process.
-        None if the process has not started or failed to start.
-        """
-        return self._return_code

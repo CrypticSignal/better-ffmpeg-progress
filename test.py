@@ -3,13 +3,13 @@ from better_ffmpeg_progress import FfmpegProcess, FfmpegProcessError
 command = [
     "ffmpeg",
     "-i",
-    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    "-c:v",
+    "https://media.xiph.org/video/derf/y4m/ducks_take_off_1080p50.y4m",
+    "-map", 
+    "0:V",
+    "-c:V",
     "libx264",
     "-preset",
     "ultrafast",
-    "-c:a",
-    "copy",
     "-f",
     "null",
     "-",
@@ -21,8 +21,5 @@ try:
     # process.use_tqdm = True
 
     process.run()
-    # The FFmpeg process failed
-    if process.return_code != 0:
-        pass
 except FfmpegProcessError as e:
     print(f"An error occurred when running the better-ffmpeg-process package:\n{e}")
