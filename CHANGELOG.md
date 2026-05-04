@@ -156,3 +156,6 @@
 
 - [v5.1.0]
   - Raise `ProgressBarError` in `progress_bars.py` instead of simply printing an error message.
+
+- [v5.1.1]
+  - Removed redundant return code check from `better_ffmpeg_progress.py` as it's already handled in `progress_bars.py`

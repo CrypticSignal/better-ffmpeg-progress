@@ -39,7 +39,7 @@ def use_rich(
     with progress_bar_instance as progress_bar:
         if duration_secs:
             task_id = progress_bar.add_task(
-                f"Processing '{input_filename}'",
+                f"Processing {input_filename}",
                 total=duration_secs,
             )
             update_progress = progress_bar.update

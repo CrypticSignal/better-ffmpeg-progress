@@ -177,22 +177,17 @@ class FfmpegProcess:
         except Exception as e:
             raise FfmpegProcessError(f"Error starting FFmpeg process: {e}") from e
 
-        user_interrupted = False
         try:
             if self.use_tqdm:
                 use_tqdm(self, self._process)
             else:
                 use_rich(self, self._process)
         except KeyboardInterrupt:
-            user_interrupted = True
             self._terminate()
         finally:
             if self._process:
                 if self._process.stdout:
                     self._process.stdout.close()
-
-        if not user_interrupted and self._process and self._process.returncode != 0:
-            raise FfmpegProcessError(f"FFmpeg process failed. Return code: {self._process.returncode}")
 
     def _terminate(self):
         if self._process:
