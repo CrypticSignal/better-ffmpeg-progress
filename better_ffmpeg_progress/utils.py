@@ -42,16 +42,10 @@ def validate_ffmpeg_command(command: List[str]) -> None:
 
     input_file_idx = input_flag_pos + 1
     if input_file_idx >= len(command):
-        raise FfmpegCommandError(
-            f"No input file specified after '{_FFMPEG_INPUT_FLAG}'."
-        )
+        raise FfmpegCommandError(f"No input file specified after '{_FFMPEG_INPUT_FLAG}'.")
 
     input_file = command[input_file_idx]
-    if (
-        input_file.startswith("-")
-        and len(input_file) == 2
-        and not input_file[1:].isdigit()
-    ):
+    if input_file.startswith("-") and len(input_file) == 2 and not input_file[1:].isdigit():
         raise FfmpegCommandError(
             f"Input file path '{input_file}' looks like an option flag. Please check your command."
         )
@@ -62,9 +56,7 @@ def validate_ffmpeg_command(command: List[str]) -> None:
             response = requests.head(input_file, timeout=5, allow_redirects=True)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            raise FfmpegCommandError(
-                f"Input URL not accessible: {input_file}. Error: {e}"
-            )
+            raise FfmpegCommandError(f"Input URL not accessible: {input_file}. Error: {e}")
     elif not Path(input_file).exists():
         raise FfmpegCommandError(f"Input file not found: {input_file}")
 

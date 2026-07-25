@@ -159,3 +159,7 @@
 
 - [v5.1.1]
   - Removed redundant return code check from `better_ffmpeg_progress.py` as it's already handled in `progress_bars.py`
+
+-[v5.2.0]
+  - Added an optional `duration_override` parameter to the `FfmpegProcess` class.
+  - Added a `ruff.toml` configuration file to define code formatting rules for [Ruff](https://github.com/astral-sh/ruff).

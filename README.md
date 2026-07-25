@@ -1,14 +1,11 @@
 <div align="center">
-
-[![PyPI downloads](https://img.shields.io/pypi/dm/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
-[![PyPI downloads](https://img.shields.io/pypi/dd/better-ffmpeg-progress?label=PyPI&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
+[![PyPI downloads](https://img.shields.io/pypi/dm/better-ffmpeg-progress?label=PyPI\&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
+[![PyPI downloads](https://img.shields.io/pypi/dd/better-ffmpeg-progress?label=PyPI\&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
 ![PyPI - Version](https://img.shields.io/pypi/v/better-ffmpeg-progress)
-[![GitHub](https://img.shields.io/github/license/crypticsignal/better-ffmpeg-progress?label=License&color=blue)](LICENSE.txt)
+[![GitHub](https://img.shields.io/github/license/crypticsignal/better-ffmpeg-progress?label=License\&color=blue)](LICENSE.txt)
 
 # Better FFmpeg Progress
-Runs an FFmpeg command and shows a progress bar with percentage progress, time elapsed and ETA.
-
-The [Rich](https://github.com/Textualize/rich) library is used for the progress bar by default, [tqdm](https://github.com/tqdm/tqdm) will be used if you pass `use_tqdm=True` to the `run` method.
+Runs an FFmpeg command and shows a progress bar with percentage progress, elapsed time and ETA.
 </div>
 
 FFmpeg outputs something like:
@@ -25,25 +22,22 @@ Where:
 - `0:00:04` is the time elapsed.
 - `00:15` is the estimated time until the FFmpeg process completes.
 
-As you can see, the output of Better FFmpeg Progress is much more useful.
-
 ## Installation
-```
+```bash
 pip install better-ffmpeg-progress --upgrade
 ```
 
 ## Usage
-Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would to `subprocess.run()` or `subprocess.Popen()`.
+Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would when using `subprocess.run()` or `subprocess.Popen()`. Example:
 
-Example:
-```py
+```python
 from better_ffmpeg_progress import FfmpegProcess, FfmpegProcessError
 
 command = [
     "ffmpeg",
     "-i",
     "https://media.xiph.org/video/derf/y4m/ducks_take_off_1080p50.y4m",
-    "-map", 
+    "-map",
     "0:V",
     "-c:V",
     "libx264",
@@ -56,20 +50,59 @@ command = [
 
 try:
     process = FfmpegProcess(command)
-    # Uncomment the line below if you want to use tqdm instead of rich for the progress bar
+    # Uncomment this line to use tqdm instead of Rich.
     # process.use_tqdm = True
 
     process.run()
 except FfmpegProcessError as e:
-    print(f"An error occurred when running the better-ffmpeg-process package:\n{e}")
+    print(
+        "An error occurred when running Better FFmpeg Progress:\n"
+        f"{e}"
+    )
 ```
+
+## Duration Override
+By default, Better FFmpeg Progress detects the duration of the input file and uses it to calculate percentage progress and ETA.
+
+For partial, damaged, streamed or synthetic inputs, FFmpeg may be unable to detect the duration correctly. In these cases, you can provide the duration manually using `duration_override`.
+
+The value should be the duration of the input file, in seconds:
+
+```python
+from better_ffmpeg_progress import FfmpegProcess
+
+command = [
+    "ffmpeg",
+    "-i",
+    "partial-input.flv",
+    "-c",
+    "copy",
+    "recovered-output.mkv",
+]
+
+process = FfmpegProcess(
+    command,
+    duration_override=1222.64,
+    print_detected_duration=True,
+)
+
+process.run()
+```
+
 ## Optional Arguments
-An instance of the `FfmpegProcess` class takes the following **optional** arguments:
+An instance of `FfmpegProcess` accepts the following optional arguments:
+* `ffmpeg_log_level` — Set a value for FFmpeg's `-loglevel` option. Default: `"verbose"`.
+* `ffmpeg_log_file` — Filepath or file-like object to which FFmpeg stderr will be written. Default: `<input filename>_ffmpeg_log.txt`.
+* `print_detected_duration` — Print the detected duration. Default: `False`.
+* `duration_override` — Specify input file duration in seconds to use for progress calculation, instead of trying to detect this automatically with FFprobe. Default: `None`.
 
-- `ffmpeg_log_level` - Desired FFmpeg log level. Default: `"verbose"`
-- `ffmpeg_log_file` - The filepath to save the FFmpeg log to. Default: `<input filename>_log.txt`
-- `print_detected_duration` - Print the detected duration of the input file. Default: `False`
-- `print_stderr_new_line` - If better progress information cannot be shown, print FFmpeg stderr in a new line instead of replacing the current line in the terminal. Default: `False`
+The `run` method accepts the following optional argument:
+* `print_command` — Print the FFmpeg command being executed. Default: `False`.
 
-The `run` method takes the following **optional** arguments:
-- `print_command` - Print the FFmpeg command being executed. Default: `False`
+## Using tqdm
+By default, the [Rich](https://github.com/Textualize/rich) library is used to display a progress bar. [tqdm](https://github.com/tqdm/tqdm) can be used instead by setting `process.use_tqdm = True`:
+```python
+process = FfmpegProcess(command)
+process.use_tqdm = True
+process.run()
+```

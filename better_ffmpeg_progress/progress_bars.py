@@ -19,9 +19,7 @@ if TYPE_CHECKING:
     from .better_ffmpeg_progress import FfmpegProcess
 
 
-def use_rich(
-    ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
-) -> None:
+def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
     task_id = None
     progress_bar_instance = Progress(
         TextColumn("[progress.description]{task.description}"),
@@ -46,9 +44,7 @@ def use_rich(
 
             for line_bytes in process.stdout:
                 stripped_line_bytes = line_bytes.strip()
-                progress_val_secs = parse_ffmpeg_progress_line(
-                    stripped_line_bytes, duration_secs
-                )
+                progress_val_secs = parse_ffmpeg_progress_line(stripped_line_bytes, duration_secs)
                 if progress_val_secs is not None and task_id is not None:
                     update_progress(task_id, completed=progress_val_secs)
         else:
@@ -75,9 +71,7 @@ def use_rich(
             raise FfmpegProcessError(f"FFmpeg process failed. Check '{log_file}' for details.")
 
 
-def use_tqdm(
-    ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
-) -> None:
+def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
     progress_bar = None
     try:
         width = os.get_terminal_size().columns
@@ -100,9 +94,7 @@ def use_tqdm(
 
         for line_bytes in process.stdout:
             stripped_line_bytes = line_bytes.strip()
-            progress_val_secs = parse_ffmpeg_progress_line(
-                stripped_line_bytes, duration_secs
-            )
+            progress_val_secs = parse_ffmpeg_progress_line(stripped_line_bytes, duration_secs)
             if progress_val_secs is not None and progress_bar is not None:
                 progress_bar.n = progress_val_secs
                 progress_bar.refresh()

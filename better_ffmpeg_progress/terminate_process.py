@@ -32,9 +32,7 @@ def _terminate_children_processes(parent_proc: psutil.Process):
     if not children:
         return
 
-    print(
-        f"Attempting to terminate {len(children)} child process(es) of {parent_proc.pid}..."
-    )
+    print(f"Attempting to terminate {len(children)} child process(es) of {parent_proc.pid}...")
     for child in children:
         try:
             if child.is_running():
@@ -68,21 +66,15 @@ def _terminate_parent_process_windows(proc: psutil.Process):
         try:
             # Check the status after the timeout
             if proc.is_running():
-                print(
-                    f"FFmpeg process {proc.pid} still running after {_TERMINATION_TIMEOUT}s."
-                )
+                print(f"FFmpeg process {proc.pid} still running after {_TERMINATION_TIMEOUT}s.")
             else:
-                print(
-                    f"FFmpeg process termination took longer than {_TERMINATION_TIMEOUT}s."
-                )
+                print(f"FFmpeg process termination took longer than {_TERMINATION_TIMEOUT}s.")
         except psutil.NoSuchProcess:
             print(
                 f"FFmpeg process not found after {_TERMINATION_TIMEOUT}s. It seems like it has terminated."
             )
         except psutil.Error as e:
-            print(
-                f"Error during status check for process {proc.pid} after timeout:\n{e}"
-            )
+            print(f"Error during status check for process {proc.pid} after timeout:\n{e}")
     except psutil.AccessDenied:
         print(f"Access denied when trying to terminate FFmpeg process {proc.pid}.")
     except psutil.Error as e:
@@ -106,14 +98,10 @@ def _terminate_parent_process_unix(proc: psutil.Process, original_pid: int):
             if not proc.is_running():
                 terminated_by_pg = True
         except psutil.TimeoutExpired:
-            print(
-                f"Process group {pgid_to_signal} did not exit after SIGTERM, sending SIGKILL..."
-            )
+            print(f"Process group {pgid_to_signal} did not exit after SIGTERM, sending SIGKILL...")
             os.killpg(pgid_to_signal, SIGKILL)
             try:
-                proc.wait(
-                    timeout=_TERMINATION_TIMEOUT
-                )  # Wait for SIGKILL on process group
+                proc.wait(timeout=_TERMINATION_TIMEOUT)  # Wait for SIGKILL on process group
                 if not proc.is_running():
                     terminated_by_pg = True
             except psutil.TimeoutExpired:
@@ -132,13 +120,9 @@ def _terminate_parent_process_unix(proc: psutil.Process, original_pid: int):
     # os.killpg failed
     except OSError as e:
         target_desc = (
-            f"process group {pgid_to_signal}"
-            if pgid_to_signal != 0
-            else f"process {original_pid}"
+            f"process group {pgid_to_signal}" if pgid_to_signal != 0 else f"process {original_pid}"
         )
-        print(
-            f"Error sending signal to {target_desc}: {e}. Fallback to individual process."
-        )
+        print(f"Error sending signal to {target_desc}: {e}. Fallback to individual process.")
 
     if terminated_by_pg:
         return
@@ -159,9 +143,7 @@ def _terminate_parent_process_unix(proc: psutil.Process, original_pid: int):
                     f"SIGTERM for FFmpeg process (PID: {proc.pid}) timed out after {_TERMINATION_TIMEOUT}s."
                 )
             except psutil.Error as e:
-                print(
-                    f"Error during SIGTERM for FFmpeg process (PID: {proc.pid}):\n{e}"
-                )
+                print(f"Error during SIGTERM for FFmpeg process (PID: {proc.pid}):\n{e}")
                 if not proc.is_running():
                     return
 
@@ -177,9 +159,7 @@ def _terminate_parent_process_unix(proc: psutil.Process, original_pid: int):
                     proc.kill()
                     print(f"SIGKILL sent to FFmpeg process (PID: {proc.pid}).")
                 except psutil.Error as e:
-                    print(
-                        f"Error during SIGKILL for FFmpeg process (PID: {proc.pid}):\n{e}"
-                    )
+                    print(f"Error during SIGKILL for FFmpeg process (PID: {proc.pid}):\n{e}")
         else:
             print(f"It seems like FFmpeg process {proc.pid} is no longer running.")
     except psutil.NoSuchProcess:
@@ -239,9 +219,7 @@ def terminate_ffmpeg_process(process: Optional[subprocess.Popen]):
             f"Main FFmpeg process {original_pid} became inaccessible during termination sequence."
         )
     except Exception as e:
-        print(
-            f"Unexpected error during main process termination for {original_pid}: {e}"
-        )
+        print(f"Unexpected error during main process termination for {original_pid}: {e}")
 
     if process.poll() is None:
         exit("It seems like the FFmpeg process has not terminated.")

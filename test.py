@@ -4,7 +4,7 @@ command = [
     "ffmpeg",
     "-i",
     "https://media.xiph.org/video/derf/y4m/ducks_take_off_1080p50.y4m",
-    "-map", 
+    "-map",
     "0:V",
     "-c:V",
     "libx264",
