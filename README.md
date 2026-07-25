@@ -1,8 +1,4 @@
 <div align="center">
-[![PyPI downloads](https://img.shields.io/pypi/dm/better-ffmpeg-progress?label=PyPI\&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
-[![PyPI downloads](https://img.shields.io/pypi/dd/better-ffmpeg-progress?label=PyPI\&color=blue)](https://pypistats.org/packages/better-ffmpeg-progress)
-![PyPI - Version](https://img.shields.io/pypi/v/better-ffmpeg-progress)
-[![GitHub](https://img.shields.io/github/license/crypticsignal/better-ffmpeg-progress?label=License\&color=blue)](LICENSE.txt)
 
 # Better FFmpeg Progress
 Runs an FFmpeg command and shows a progress bar with percentage progress, elapsed time and ETA.
