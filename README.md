@@ -15,7 +15,7 @@ Processing abc.webm
 ```
 Where:
 - `Processing abc.webm` is the description of the progresss bar.
-- '(5.50 MB / ~451.67 MB)' is the current output size / estimated final output size.
+- `(5.50 MB / ~451.67 MB)` is the current output size / estimated final output size.
 - `3%` is the percentage progress.
 - `0:00:11` is the time elapsed.
 - `04:15` is the estimated time until the FFmpeg process completes.
