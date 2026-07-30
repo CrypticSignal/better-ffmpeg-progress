@@ -10,18 +10,15 @@ frame=  692 fps= 58 q=28.0 size=    5376KiB time=00:00:28.77 bitrate=1530.3kbits
 ```
 Better FFmpeg Progress outputs something like:
 ```
-⠏ Processing abc.webm ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
+Processing abc.webm
+(5.50 MB / ~451.67 MB) ━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  3% 0:00:11 04:15
 ```
 Where:
 - `Processing abc.webm` is the description of the progresss bar.
-- `23%` is the percentage progress.
-- `0:00:04` is the time elapsed.
-- `00:15` is the estimated time until the FFmpeg process completes.
-
-## Installation
-```bash
-pip install better-ffmpeg-progress --upgrade
-```
+- '(5.50 MB / ~451.67 MB)' is the current output size / estimated final output size.
+- `3%` is the percentage progress.
+- `0:00:11` is the time elapsed.
+- `04:15` is the estimated time until the FFmpeg process completes.
 
 ## Usage
 Create an instance of the `FfmpegProcess` class and supply a list of arguments like you would when using `subprocess.run()` or `subprocess.Popen()`. Example:
