@@ -1,7 +1,8 @@
 import os
 import subprocess
 from typing import TYPE_CHECKING
-
+from rich.console import Console
+from rich.theme import Theme
 from rich.progress import (
     Progress,
     TextColumn,
@@ -33,28 +34,42 @@ def truncate_filename(filename: str, max_length: int = 60) -> str:
 
     return f"{stem[:allowed_stem_len]}{ellipsis}{ext}"
 
+custom_theme = Theme({
+    "progress.elapsed": "bold white",
+    "progress.remaining": "white",
+    "progress.percentage": "sea_green3",
+})
+
+console = Console(theme=custom_theme)
 
 def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
     task_id = None
     progress_bar_instance = Progress(
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
+        BarColumn(bar_width=40, style="grey15", complete_style="bold sea_green3", finished_style="bold bright_green"),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         TimeRemainingColumn(compact=True),
         refresh_per_second=8,
+        console=console,
     )
 
     duration_secs = ffmpeg_process_instance._duration_secs
-    # Truncate input filename to a max of 60 characters
     input_filename = truncate_filename(ffmpeg_process_instance._input_filepath.name, max_length=60)
     log_file = ffmpeg_process_instance._ffmpeg_log_file
 
     with progress_bar_instance as progress_bar:
         if duration_secs:
             current_size_mb = 0.0
+            current_time_secs = 0.0
+            estimated_size_mb = 0.0
+
+            # Line 1: Header/Filename printed separately
+            console.print(f"Processing {input_filename}")
+
+            # Line 2: Progress metrics and size stats
             task_id = progress_bar.add_task(
-                f"Processing {input_filename} (0.00 MB)",
+                " (0.00 MB / ~0.00 MB)",
                 total=duration_secs,
             )
             update_progress = progress_bar.update
@@ -68,11 +83,17 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                         current_size_mb = progress_data["size_mb"]
 
                     if "time_secs" in progress_data:
-                        update_progress(
-                            task_id,
-                            completed=progress_data["time_secs"],
-                            description=f"Processing {input_filename} ({current_size_mb:.2f} MB)",
-                        )
+                        current_time_secs = progress_data["time_secs"]
+
+                    # Calculate dynamic estimated final size
+                    if current_time_secs > 0:
+                        estimated_size_mb = (current_size_mb / current_time_secs) * duration_secs
+
+                    update_progress(
+                        task_id,
+                        completed=current_time_secs,
+                        description=f" ({current_size_mb:.2f} MB / ~{estimated_size_mb:.2f} MB)",
+                    )
         else:
             print(f"Processing '{input_filename}'...")
 
@@ -83,19 +104,13 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                 update_progress(task_id, completed=duration_secs)
                 progress_bar.columns = (
                     TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
+                    BarColumn(bar_width=40, style="red", complete_style="green", finished_style="bold bright_green"),
                     TaskProgressColumn(),
                 )
                 update_progress(
                     task_id,
-                    description=f"✓ Processed {input_filename} ({current_size_mb:.2f} MB)",
+                    description=f"✓ Final Size: {current_size_mb:.2f} MB",
                 )
-        else:
-            if task_id is not None:
-                progress_bar.update(task_id)
-
-            raise FfmpegProcessError(f"FFmpeg process failed. Check '{log_file}' for details.")
-
 
 def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
     progress_bar = None
