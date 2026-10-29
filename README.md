@@ -57,6 +57,9 @@ except FfmpegProcessError as e:
     )
 ```
 
+## Trimming
+If your command trims the input with `-ss`, `-sseof`, `-t` or `-to` (as input or output options), the expected duration of the output is calculated automatically, so the progress bar and ETA reflect the trimmed output rather than the whole input file. This adjustment is skipped when `-copyts` is used.
+
 ## Duration Override
 By default, Better FFmpeg Progress detects the duration of the input file and uses it to calculate percentage progress and ETA.
 
