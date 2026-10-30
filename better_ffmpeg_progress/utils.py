@@ -1,7 +1,8 @@
+import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 import requests  # Added for URL validation
 
 from .exceptions import FfmpegCommandError
@@ -141,3 +142,89 @@ def parse_ffmpeg_progress_line(
             return None
 
     return None
+
+
+# Matches FFmpeg's time duration syntax: [-][HH:]MM:SS[.m...] or [-]S+[.m...][s|ms|us]
+_SEXAGESIMAL_RE = re.compile(r"^(-)?(?:(\d+):)?(\d+):(\d+(?:\.\d*)?)$")
+_SECONDS_RE = re.compile(r"^(-)?(\d+(?:\.\d*)?|\.\d+)(s|ms|us)?$")
+_TRIM_OPTIONS = ("-ss", "-sseof", "-t", "-to")
+
+
+def parse_ffmpeg_time(value: str) -> Optional[float]:
+    """
+    Parses a time duration in FFmpeg's syntax (e.g. "90", "1.5", "500ms", "01:30", "00:01:30.5").
+    Returns the value in seconds, or None if it cannot be parsed.
+    """
+    value = value.strip()
+
+    match = _SEXAGESIMAL_RE.match(value)
+    if match:
+        sign, hours, minutes, seconds = match.groups()
+        total = int(hours or 0) * 3600 + int(minutes) * 60 + float(seconds)
+        return -total if sign else total
+
+    match = _SECONDS_RE.match(value)
+    if match:
+        sign, number, unit = match.groups()
+        total = float(number) / {None: 1, "s": 1, "ms": 1e3, "us": 1e6}[unit]
+        return -total if sign else total
+
+    return None
+
+
+def _collect_trim_options(args: List[str]) -> Dict[str, float]:
+    """Returns the last value of each trim option found in args (FFmpeg uses the last occurrence)."""
+    options: Dict[str, float] = {}
+    for i, arg in enumerate(args[:-1]):
+        if arg in _TRIM_OPTIONS:
+            parsed = parse_ffmpeg_time(args[i + 1])
+            if parsed is not None:
+                options[arg] = parsed
+    return options
+
+
+def _apply_trim(duration: float, options: Dict[str, float]) -> float:
+    """
+    Applies -ss/-sseof/-t/-to to a duration, mirroring FFmpeg's logic:
+    -t takes priority over -to, and -to is relative to -ss (recording_time = to - ss).
+    """
+    start = options.get("-ss", 0.0)
+
+    if "-sseof" in options and "-ss" not in options:
+        # -sseof is negative, relative to the end of the input
+        remaining = min(duration, abs(options["-sseof"]))
+    else:
+        remaining = duration - max(start, 0.0)
+
+    if "-t" in options:
+        remaining = min(remaining, options["-t"])
+    elif "-to" in options:
+        remaining = min(remaining, options["-to"] - max(start, 0.0))
+
+    return max(remaining, 0.0)
+
+
+def get_expected_output_duration(command: List[str], input_duration: float) -> float:
+    """
+    Estimates the duration of the output by taking the trim options of the command into account.
+
+    Options before the first "-i" are input options for the first input, and options between the
+    last input path and the output path are output options. Input trimming is applied first
+    (seeking with an input -ss resets timestamps to 0), then output trimming.
+
+    If -copyts is used, timestamps are not reset, so no adjustment is made.
+    """
+    if "-copyts" in command:
+        return input_duration
+
+    first_input_idx = command.index(_FFMPEG_INPUT_FLAG)
+    last_input_idx = len(command) - 1 - command[::-1].index(_FFMPEG_INPUT_FLAG)
+
+    input_options = _collect_trim_options(command[1:first_input_idx])
+    output_options = _collect_trim_options(command[last_input_idx + 2 : -1])
+
+    duration = _apply_trim(input_duration, input_options)
+    duration = _apply_trim(duration, output_options)
+
+    # Never return 0, which would disable the progress bar.
+    return duration if duration > 0 else input_duration

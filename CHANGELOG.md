@@ -163,3 +163,8 @@
 -[v5.2.0]
   - Added an optional `duration_override` parameter to the `FfmpegProcess` class.
   - Added a `ruff.toml` configuration file to define code formatting rules for [Ruff](https://github.com/astral-sh/ruff).
+
+[29/10/2026]
+
+- [v5.2.1]
+  - Account for `-ss`, `-sseof`, `-t` and `-to` when calculating progress, so the progress bar no longer cuts off early when trimming ([#33](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/33)).

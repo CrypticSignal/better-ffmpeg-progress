@@ -15,6 +15,7 @@ from .exceptions import (
 from .utils import (
     validate_ffmpeg_command,
     get_media_duration,
+    get_expected_output_duration,
     check_shell_needed_for_command,
 )
 from .terminate_process import terminate_ffmpeg_process
@@ -135,13 +136,27 @@ class FfmpegProcess:
         else:
             self._duration_secs = get_media_duration(input_file_path_str)
 
+        input_duration_secs = self._duration_secs
+
+        # Account for trimming (-ss, -sseof, -t, -to) so the progress bar reflects the
+        # duration of the output rather than the whole input.
+        if self._duration_secs is not None:
+            self._duration_secs = get_expected_output_duration(command, self._duration_secs)
+
         if duration_override is not None:
-            print(f"Using duration override: {self._duration_secs:.2f} seconds")
+            print(f"Using duration override: {input_duration_secs:.2f} seconds")
         elif self._print_detected_duration:
             if self._duration_secs is None:
                 print("Could not detect duration. Progress bar may not show time remaining.")
             else:
-                print(f"Detected duration: {self._duration_secs:.2f} seconds")
+                print(f"Detected duration: {input_duration_secs:.2f} seconds")
+
+        if (
+            self._duration_secs is not None
+            and self._duration_secs != input_duration_secs
+            and (duration_override is not None or self._print_detected_duration)
+        ):
+            print(f"Expected output duration after trimming: {self._duration_secs:.2f} seconds")
 
         self._ffmpeg_command = [
             command[0],
