@@ -1,5 +1,6 @@
 import math
 import os
+import re
 from pathlib import Path
 import subprocess
 from sys import exit
@@ -17,6 +18,7 @@ from .utils import (
     get_media_duration,
     get_expected_output_duration,
     check_shell_needed_for_command,
+    is_lavfi_input,
 )
 from .terminate_process import terminate_ffmpeg_process
 from .progress_bars import use_rich, use_tqdm
@@ -112,7 +114,14 @@ class FfmpegProcess:
         self._output_filepath = Path(command[-1])
 
         if ffmpeg_log_file is None:
-            self._ffmpeg_log_file = Path(f"{self._input_filepath.name}_ffmpeg_log.txt")
+            if is_lavfi_input(command, input_file_index):
+                # A filtergraph such as "testsrc2=size=1920x1080" can contain characters that
+                # are not valid in filenames (e.g. ":" on Windows), so name the log after the
+                # source instead.
+                source_name = re.sub(r"[^\w.,-]", "_", input_file_path_str.split("=", 1)[0])
+                self._ffmpeg_log_file = Path(f"lavfi_{source_name}_ffmpeg_log.txt")
+            else:
+                self._ffmpeg_log_file = Path(f"{self._input_filepath.name}_ffmpeg_log.txt")
         elif isinstance(ffmpeg_log_file, (str, os.PathLike)):
             self._ffmpeg_log_file = Path(ffmpeg_log_file)
         else:
