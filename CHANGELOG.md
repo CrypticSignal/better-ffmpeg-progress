@@ -166,4 +166,5 @@
 
 [29/10/2026]
 
-- Account for `-ss`, `-sseof`, `-t` and `-to` when calculating progress, so the progress bar no longer cuts off early when trimming ([#33](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/33)).
+- [v5.2.1]
+  - Account for `-ss`, `-sseof`, `-t` and `-to` when calculating progress, so the progress bar no longer cuts off early when trimming ([#33](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/33)).
