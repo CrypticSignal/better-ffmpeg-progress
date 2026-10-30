@@ -10,10 +10,11 @@ frame=  692 fps= 58 q=28.0 size=    5376KiB time=00:00:28.77 bitrate=1530.3kbits
 ```
 Better FFmpeg Progress outputs something like:
 ```
-⠏ Processing abc.webm ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
+⠏ Processing abc.webm (5.50 MB / ~23.91 MB) ━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  23% 0:00:04 00:15
 ```
 Where:
-- `Processing abc.webm` is the description of the progresss bar.
+- `Processing abc.webm` is the description of the progresss bar. Filenames longer than 60 characters are truncated.
+- `(5.50 MB / ~23.91 MB)` is the current output size and the estimated final output size.
 - `23%` is the percentage progress.
 - `0:00:04` is the time elapsed.
 - `00:15` is the estimated time until the FFmpeg process completes.

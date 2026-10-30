@@ -1,6 +1,6 @@
 import os
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from rich.progress import (
     Progress,
@@ -12,11 +12,23 @@ from rich.progress import (
 )
 from tqdm import tqdm
 
-from .utils import parse_ffmpeg_progress_line
+from .utils import (
+    estimate_final_size_mb,
+    parse_ffmpeg_progress_line,
+    parse_ffmpeg_total_size_line,
+    truncate_filename,
+)
 from .exceptions import FfmpegProcessError
 
 if TYPE_CHECKING:
     from .better_ffmpeg_progress import FfmpegProcess
+
+_MAX_FILENAME_LENGTH = 60
+
+
+def _format_size(current_size_mb: float, estimated_size_mb: Optional[float]) -> str:
+    estimate = f"~{estimated_size_mb:.2f} MB" if estimated_size_mb is not None else "~? MB"
+    return f"({current_size_mb:.2f} MB / {estimate})"
 
 
 def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
@@ -31,11 +43,14 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
     )
 
     duration_secs = ffmpeg_process_instance._duration_secs
-    input_filename = ffmpeg_process_instance._input_filepath.name
+    input_filename = truncate_filename(
+        ffmpeg_process_instance._input_filepath.name, _MAX_FILENAME_LENGTH
+    )
     log_file = ffmpeg_process_instance._ffmpeg_log_file
 
     with progress_bar_instance as progress_bar:
         if duration_secs:
+            current_size_mb = 0.0
             task_id = progress_bar.add_task(
                 f"Processing {input_filename}",
                 total=duration_secs,
@@ -44,9 +59,25 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
 
             for line_bytes in process.stdout:
                 stripped_line_bytes = line_bytes.strip()
+
+                size_mb = parse_ffmpeg_total_size_line(stripped_line_bytes)
+                if size_mb is not None:
+                    current_size_mb = size_mb
+                    continue
+
+                # FFmpeg writes total_size before out_time_us in each progress block,
+                # so updating here refreshes the bar once per block with the latest size.
                 progress_val_secs = parse_ffmpeg_progress_line(stripped_line_bytes, duration_secs)
                 if progress_val_secs is not None and task_id is not None:
-                    update_progress(task_id, completed=progress_val_secs)
+                    estimated_size_mb = estimate_final_size_mb(
+                        current_size_mb, progress_val_secs, duration_secs
+                    )
+                    update_progress(
+                        task_id,
+                        completed=progress_val_secs,
+                        description=f"Processing {input_filename} "
+                        f"{_format_size(current_size_mb, estimated_size_mb)}",
+                    )
         else:
             print(f"Processing '{input_filename}'...")
 
@@ -62,7 +93,7 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                 )
                 update_progress(
                     task_id,
-                    description=f"✓ Processed '{input_filename}'",
+                    description=f"✓ Processed '{input_filename}' ({current_size_mb:.2f} MB)",
                 )
         else:
             if task_id is not None:
@@ -79,8 +110,12 @@ def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
         width = 80
 
     duration_secs = ffmpeg_process_instance._duration_secs
-    input_filename = ffmpeg_process_instance._input_filepath.name
+    input_filename = truncate_filename(
+        ffmpeg_process_instance._input_filepath.name, _MAX_FILENAME_LENGTH
+    )
     log_file = ffmpeg_process_instance._ffmpeg_log_file
+
+    current_size_mb = 0.0
 
     if duration_secs:
         progress_bar = tqdm(
@@ -94,10 +129,20 @@ def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
 
         for line_bytes in process.stdout:
             stripped_line_bytes = line_bytes.strip()
+
+            size_mb = parse_ffmpeg_total_size_line(stripped_line_bytes)
+            if size_mb is not None:
+                current_size_mb = size_mb
+                continue
+
             progress_val_secs = parse_ffmpeg_progress_line(stripped_line_bytes, duration_secs)
             if progress_val_secs is not None and progress_bar is not None:
+                estimated_size_mb = estimate_final_size_mb(
+                    current_size_mb, progress_val_secs, duration_secs
+                )
                 progress_bar.n = progress_val_secs
-                progress_bar.refresh()
+                # set_postfix_str refreshes the bar by default
+                progress_bar.set_postfix_str(_format_size(current_size_mb, estimated_size_mb))
     else:
         print(f"Processing '{input_filename}'...")
 
@@ -107,6 +152,7 @@ def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
         if progress_bar:
             progress_bar.n = duration_secs
             progress_bar.set_description(f"✓ Processed '{input_filename}'")
+            progress_bar.set_postfix_str(f"{current_size_mb:.2f} MB")
             progress_bar.close()
         else:
             print(f"✓ Processed '{input_filename}'")

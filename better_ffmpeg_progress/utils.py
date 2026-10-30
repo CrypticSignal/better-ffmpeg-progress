@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import subprocess
@@ -9,6 +10,8 @@ from .exceptions import FfmpegCommandError
 
 _FFMPEG_INPUT_FLAG = "-i"
 _OUT_TIME_US_PREFIX = b"out_time_us="
+_TOTAL_SIZE_PREFIX = b"total_size="
+_BYTES_PER_MB = 1024 * 1024
 _MULTIPLIER = 1e-6
 
 
@@ -228,3 +231,54 @@ def get_expected_output_duration(command: List[str], input_duration: float) -> f
 
     # Never return 0, which would disable the progress bar.
     return duration if duration > 0 else input_duration
+
+
+def parse_ffmpeg_total_size_line(line: bytes) -> Optional[float]:
+    """
+    Parses a total_size line from FFmpeg's stdout.
+    Example line: b"total_size=12345678"
+    Returns the current output size in MB, or None if parsing fails or line is not a total_size line.
+    Assumes `line` has already been stripped of leading/trailing whitespace.
+    """
+    if line.startswith(_TOTAL_SIZE_PREFIX):
+        try:
+            value_str = line[len(_TOTAL_SIZE_PREFIX) :]
+
+            if not value_str:
+                return None
+
+            return int(value_str) / _BYTES_PER_MB
+        except ValueError:
+            return None
+
+    return None
+
+
+def truncate_filename(filename: str, max_length: int = 60) -> str:
+    """
+    Truncates a filename to at most max_length characters, preserving the file extension.
+    """
+    if len(filename) <= max_length:
+        return filename
+
+    stem, ext = os.path.splitext(filename)
+    ellipsis = "..."
+    allowed_stem_len = max_length - len(ext) - len(ellipsis)
+
+    if allowed_stem_len < 1:
+        return filename[: max_length - len(ellipsis)] + ellipsis
+
+    return f"{stem[:allowed_stem_len]}{ellipsis}{ext}"
+
+
+def estimate_final_size_mb(
+    current_size_mb: float, current_time_secs: float, total_duration_secs: float
+) -> Optional[float]:
+    """
+    Estimates the final output size in MB by extrapolating the current size over the total duration.
+    Returns None until enough of the input has been processed for the estimate to be meaningful.
+    """
+    min_secs = max(1.0, total_duration_secs * 0.01)
+    if current_time_secs < min_secs or current_size_mb <= 0:
+        return None
+    return current_size_mb / current_time_secs * total_duration_secs
