@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import shlex
 from pathlib import Path
 import subprocess
 from sys import exit
@@ -17,7 +18,6 @@ from .utils import (
     validate_ffmpeg_command,
     get_media_duration,
     get_expected_output_duration,
-    check_shell_needed_for_command,
     is_lavfi_input,
 )
 from .terminate_process import terminate_ffmpeg_process
@@ -191,22 +191,7 @@ class FfmpegProcess:
         print_command: bool = False,
     ) -> None:
         if print_command:
-            cmd_str = (
-                " ".join(self._ffmpeg_command)
-                if isinstance(self._ffmpeg_command, list)
-                else self._ffmpeg_command
-            )
-            print(f"Executing: {cmd_str}")
-
-        self._shell_needed = check_shell_needed_for_command(
-            self._ffmpeg_command
-            if isinstance(self._ffmpeg_command, list)
-            else [self._ffmpeg_command]
-        )
-
-        current_ffmpeg_command = self._ffmpeg_command
-        if self._shell_needed and isinstance(current_ffmpeg_command, list):
-            current_ffmpeg_command = " ".join(current_ffmpeg_command)
+            print(f"Executing: {shlex.join(self._ffmpeg_command)}")
 
         try:
             creationflags = 0
@@ -221,16 +206,14 @@ class FfmpegProcess:
                     encoding="utf-8",
                 ) as f:
                     self._process = subprocess.Popen(
-                        current_ffmpeg_command,
-                        shell=self._shell_needed,
+                        self._ffmpeg_command,
                         stdout=subprocess.PIPE,
                         stderr=f,
                         creationflags=creationflags,
                     )
             else:
                 self._process = subprocess.Popen(
-                    current_ffmpeg_command,
-                    shell=self._shell_needed,
+                    self._ffmpeg_command,
                     stdout=subprocess.PIPE,
                     stderr=self._ffmpeg_log_file,
                     creationflags=creationflags,

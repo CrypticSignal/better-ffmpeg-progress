@@ -117,16 +117,6 @@ def get_media_duration(input_file: str) -> Optional[float]:
         return None
 
 
-def check_shell_needed_for_command(command: List[str]) -> bool:
-    """
-    Checks if any part of the command contains shell operators,
-    indicating that shell=True might be needed for subprocess.Popen.
-    This is a basic check and might not cover all edge cases.
-    """
-    shell_operators = {"|", ">", "<", ">>", "&&", "||"}  # Basic set
-    return any(op in item for item in command for op in shell_operators)
-
-
 def parse_ffmpeg_progress_line(
     line: bytes, total_duration_secs: Optional[float]
 ) -> Optional[float]:
