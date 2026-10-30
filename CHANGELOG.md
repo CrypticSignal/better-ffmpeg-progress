@@ -168,3 +168,10 @@
 
 - [v5.2.1]
   - Account for `-ss`, `-sseof`, `-t` and `-to` when calculating progress, so the progress bar no longer cuts off early when trimming ([#33](https://github.com/CrypticSignal/better-ffmpeg-progress/issues/33)).
+
+[30/10/2026]
+
+- [v5.3.0]
+  - The progress bar now shows the current output size and an estimated final output size.
+  - Filenames longer than 60 characters are truncated in the progress bar, preserving the file extension.
+  - The final "Processed" line now includes the final output size.
