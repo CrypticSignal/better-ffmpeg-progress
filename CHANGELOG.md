@@ -183,3 +183,6 @@
 - [v5.4.1]
   - FFmpeg is now always run directly instead of through a shell. Previously, a command was run through a shell if any argument contained a character such as `|`, `<` or `>`. The arguments were then joined with spaces without quoting, so the command broke if, for example, a filtergraph contained `;` (e.g. libvmaf's `feature=name=psnr|name=float_ssim` option) or a path contained a space.
   - `print_command=True` now prints the command with shell quoting, so it can be copied and run in a terminal.
+
+- [v5.4.2]
+  - The output size is only shown once FFmpeg reports one, instead of showing `(0.00 MB / ~? MB)`. Until there is enough progress for an estimate, only the current size is shown, e.g. `(3.25 MB)`. When the output size is never reported (e.g. with `-f null`), no size is shown at all.

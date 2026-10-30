@@ -27,8 +27,21 @@ _MAX_FILENAME_LENGTH = 60
 
 
 def _format_size(current_size_mb: float, estimated_size_mb: Optional[float]) -> str:
-    estimate = f"~{estimated_size_mb:.2f} MB" if estimated_size_mb is not None else "~? MB"
-    return f"({current_size_mb:.2f} MB / {estimate})"
+    """
+    Returns e.g. "(3.25 MB / ~14.33 MB)", "(3.25 MB)" while there is no estimate yet, or ""
+    if FFmpeg has not reported a size (e.g. at the start, or when the output is "-f null").
+    """
+    # Also hide sizes that would display as "0.00 MB", such as a container header of a few bytes.
+    if round(current_size_mb, 2) <= 0:
+        return ""
+    if estimated_size_mb is None:
+        return f"({current_size_mb:.2f} MB)"
+    return f"({current_size_mb:.2f} MB / ~{estimated_size_mb:.2f} MB)"
+
+
+def _with_size(text: str, current_size_mb: float, estimated_size_mb: Optional[float]) -> str:
+    size = _format_size(current_size_mb, estimated_size_mb)
+    return f"{text} {size}" if size else text
 
 
 def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
@@ -75,8 +88,9 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                     update_progress(
                         task_id,
                         completed=progress_val_secs,
-                        description=f"Processing {input_filename} "
-                        f"{_format_size(current_size_mb, estimated_size_mb)}",
+                        description=_with_size(
+                            f"Processing {input_filename}", current_size_mb, estimated_size_mb
+                        ),
                     )
         else:
             print(f"Processing '{input_filename}'...")
@@ -93,7 +107,9 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                 )
                 update_progress(
                     task_id,
-                    description=f"✓ Processed '{input_filename}' ({current_size_mb:.2f} MB)",
+                    description=_with_size(
+                        f"✓ Processed '{input_filename}'", current_size_mb, None
+                    ),
                 )
         else:
             if task_id is not None:
@@ -152,7 +168,7 @@ def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
         if progress_bar:
             progress_bar.n = duration_secs
             progress_bar.set_description(f"✓ Processed '{input_filename}'")
-            progress_bar.set_postfix_str(f"{current_size_mb:.2f} MB")
+            progress_bar.set_postfix_str(_format_size(current_size_mb, None))
             progress_bar.close()
         else:
             print(f"✓ Processed '{input_filename}'")
