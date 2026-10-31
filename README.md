@@ -129,6 +129,10 @@ By default, the [Rich](https://github.com/Textualize/rich) library is used to di
 process = FfmpegProcess(command, use_tqdm=True)
 process.run()
 ```
+## Limitations
+- Progress is calculated from the duration of the first input (the first `-i`).
+- The last argument of the command is treated as the output file, e.g. when checking whether it already exists. With multiple outputs, only the last one is checked.
+
 ## Development
 Install the package in editable mode with the test dependencies, then run the tests (FFmpeg and FFprobe must be installed):
 ```bash
