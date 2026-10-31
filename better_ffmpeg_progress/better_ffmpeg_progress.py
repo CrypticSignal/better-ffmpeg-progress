@@ -4,7 +4,7 @@ import re
 import shlex
 from pathlib import Path
 import subprocess
-from typing import List, Optional, Union
+from typing import IO, Any, List, Optional, Union
 
 from .enums import FfmpegLogLevel
 from .exceptions import (
@@ -66,7 +66,7 @@ class FfmpegProcess:
         self,
         command: List[str],
         ffmpeg_log_level: Optional[Union[FfmpegLogLevel, str]] = None,
-        ffmpeg_log_file: Optional[Union[str, os.PathLike]] = None,
+        ffmpeg_log_file: Optional[Union[str, os.PathLike, IO[Any]]] = None,
         print_detected_duration: bool = False,
         duration_override: Optional[float] = None,
         overwrite: Optional[bool] = None,
@@ -81,7 +81,8 @@ class FfmpegProcess:
             ffmpeg_log_level:
                 FFmpeg log level enum or case-insensitive string.
             ffmpeg_log_file:
-                File path or file-like object used for FFmpeg stderr.
+                File path or file object (with a file descriptor, e.g. one returned by open())
+                to which FFmpeg's stderr is written.
             print_detected_duration:
                 Print the duration used for progress calculation.
             duration_override:

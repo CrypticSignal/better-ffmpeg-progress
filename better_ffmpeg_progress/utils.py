@@ -89,12 +89,7 @@ def validate_ffmpeg_command(command: List[str]) -> None:
             f"FFmpeg command must include the input flag '{_FFMPEG_INPUT_FLAG}'."
         )
 
-    try:
-        input_flag_pos = command.index(_FFMPEG_INPUT_FLAG)
-    except ValueError:
-        raise FfmpegCommandError(
-            f"Internal error: Input flag '{_FFMPEG_INPUT_FLAG}' not found after check."
-        )
+    input_flag_pos = command.index(_FFMPEG_INPUT_FLAG)
 
     input_file_idx = input_flag_pos + 1
     if input_file_idx >= len(command):
