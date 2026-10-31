@@ -142,3 +142,25 @@ pip install -e ".[test]"
 pytest
 ```
 `test.py` is a standalone example that encodes a test pattern and shows the progress bar.
+
+## Publishing
+Update `__version__` in `better_ffmpeg_progress/__init__.py` and add an entry to `CHANGELOG.md`.
+
+One-time setup:
+```bash
+pip install --upgrade build twine
+```
+
+Then, for each release:
+```bash
+rm -rf dist
+```
+```bash
+python -m build
+```
+```bash
+twine check dist/*
+```
+```bash
+twine upload dist/*
+```
