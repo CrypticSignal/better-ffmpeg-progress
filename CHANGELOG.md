@@ -186,3 +186,19 @@
 
 - [v5.4.2]
   - The output size is only shown once FFmpeg reports one, instead of showing `(0.00 MB / ~? MB)`. Until there is enough progress for an estimate, only the current size is shown, e.g. `(3.25 MB)`. When the output size is never reported (e.g. with `-f null`), no size is shown at all.
+
+[31/10/2026]
+
+- [v6.0.0]
+  - **Breaking:** `run()` now raises `FfmpegProcessInterruptedError` when the FFmpeg process is cancelled with Ctrl+C, instead of returning normally. The package also no longer calls `sys.exit()`; `FfmpegProcessError` is raised if FFmpeg cannot be terminated.
+  - **Breaking:** Python 3.9 or newer is now required. (The package already required Python 3.8 despite declaring 3.7, and both versions are end-of-life.)
+  - Fixed FFmpeg never finishing when the input duration could not be detected. FFmpeg's progress output was not read in this case, so FFmpeg blocked once the pipe's buffer was full.
+  - Fixed Ctrl+C terminating the Python process itself on Linux and macOS. FFmpeg now runs in its own process group.
+  - Inputs that are not local files are no longer rejected with "Input file not found": standard input (`-i -`, `pipe:`), protocols such as `rtsp://` and `srt://`, inputs with an explicit format (e.g. `-f v4l2`, `-f concat`) and image sequence patterns (e.g. `img%03d.png`). FFprobe is no longer run on standard input, and the default log filename no longer contains invalid characters for these inputs.
+  - URL inputs are no longer checked with an HTTP HEAD request, which many servers reject for media that FFmpeg can read. The `requests` dependency has been removed.
+  - Added an `overwrite` parameter: `True` overwrites an existing output file without prompting and `False` raises `FfmpegCommandError`. The prompt is also skipped when the command contains `-n`, or when the input is standard input.
+  - Added a `use_tqdm` parameter. Setting the `use_tqdm` attribute still works.
+  - When FFmpeg fails, the error message now includes the last lines of the FFmpeg log.
+  - Termination diagnostics are now logged with the `logging` module instead of printed.
+  - Replaced `setup.py` with `pyproject.toml`, added a `py.typed` marker and `better_ffmpeg_progress.__version__`.
+  - Added pytest tests and a GitHub Actions workflow, replacing `tox.ini`.
