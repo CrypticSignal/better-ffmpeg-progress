@@ -148,7 +148,7 @@ Update `__version__` in `better_ffmpeg_progress/__init__.py` and add an entry to
 
 One-time setup:
 ```bash
-pip install --upgrade build twine pkginfo
+python -m pip install --upgrade build twine pkginfo
 ```
 
 Then, for each release:
@@ -159,8 +159,8 @@ rm -rf dist
 python -m build
 ```
 ```bash
-twine check dist/*
+python -m twine check dist/*
 ```
 ```bash
-twine upload dist/*
+python -m twine upload dist/*
 ```
