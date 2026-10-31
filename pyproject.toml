@@ -34,3 +34,6 @@ version = { attr = "better_ffmpeg_progress.__version__" }
 
 [tool.setuptools.package-data]
 better_ffmpeg_progress = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

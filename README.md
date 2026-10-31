@@ -129,3 +129,12 @@ By default, the [Rich](https://github.com/Textualize/rich) library is used to di
 process = FfmpegProcess(command, use_tqdm=True)
 process.run()
 ```
+## Development
+Install the package in editable mode with the test dependencies, then run the tests (FFmpeg and FFprobe must be installed):
+```bash
+pip install -e ".[test]"
+```
+```bash
+pytest
+```
+`test.py` is a standalone example that encodes a test pattern and shows the progress bar.
