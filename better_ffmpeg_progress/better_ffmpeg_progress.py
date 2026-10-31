@@ -193,12 +193,15 @@ class FfmpegProcess:
         if print_command:
             print(f"Executing: {shlex.join(self._ffmpeg_command)}")
 
-        try:
-            creationflags = 0
-            # Windows
-            if os.name == "nt":
-                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        # Run FFmpeg in its own process group, so that terminating the group on
+        # KeyboardInterrupt does not also terminate this Python process.
+        popen_kwargs = {}
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs["start_new_session"] = True
 
+        try:
             if isinstance(self._ffmpeg_log_file, Path):
                 with open(
                     self._ffmpeg_log_file,
@@ -209,14 +212,14 @@ class FfmpegProcess:
                         self._ffmpeg_command,
                         stdout=subprocess.PIPE,
                         stderr=f,
-                        creationflags=creationflags,
+                        **popen_kwargs,
                     )
             else:
                 self._process = subprocess.Popen(
                     self._ffmpeg_command,
                     stdout=subprocess.PIPE,
                     stderr=self._ffmpeg_log_file,
-                    creationflags=creationflags,
+                    **popen_kwargs,
                 )
         except Exception as e:
             raise FfmpegProcessError(f"Error starting FFmpeg process: {e}") from e
