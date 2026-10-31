@@ -13,6 +13,7 @@ from rich.progress import (
 from tqdm import tqdm
 
 from .utils import (
+    build_failure_message,
     estimate_final_size_mb,
     parse_ffmpeg_progress_line,
     parse_ffmpeg_total_size_line,
@@ -126,7 +127,7 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
             if task_id is not None:
                 progress_bar.update(task_id)
 
-            raise FfmpegProcessError(f"FFmpeg process failed. Check '{log_file}' for details.")
+            raise FfmpegProcessError(build_failure_message(log_file))
 
 
 def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
@@ -188,4 +189,4 @@ def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
         if progress_bar:
             progress_bar.close()
 
-        raise FfmpegProcessError(f"FFmpeg process failed. Check '{log_file}' for details.")
+        raise FfmpegProcessError(build_failure_message(log_file))

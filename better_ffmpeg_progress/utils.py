@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -322,3 +323,23 @@ def estimate_final_size_mb(
     if current_time_secs < min_secs or current_size_mb <= 0:
         return None
     return current_size_mb / current_time_secs * total_duration_secs
+
+
+def build_failure_message(log_file: object, max_lines: int = 5) -> str:
+    """
+    Returns the error message for a failed FFmpeg process, including the last lines of the
+    FFmpeg log when it was written to a file path.
+    """
+    message = f"FFmpeg process failed. Check '{log_file}' for details."
+    if not isinstance(log_file, Path):
+        return message
+
+    try:
+        with open(log_file, encoding="utf-8", errors="replace") as f:
+            tail = [line.rstrip() for line in deque(f, maxlen=max_lines) if line.strip()]
+    except OSError:
+        return message
+
+    if not tail:
+        return message
+    return message + " Last lines of the log:\n" + "\n".join(tail)
