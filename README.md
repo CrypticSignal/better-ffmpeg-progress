@@ -118,6 +118,7 @@ An instance of `FfmpegProcess` accepts the following optional arguments:
 * `ffmpeg_log_file` — Filepath or file-like object to which FFmpeg stderr will be written. Default: `<input filename>_ffmpeg_log.txt`.
 * `print_detected_duration` — Print the detected duration. Default: `False`.
 * `duration_override` — Specify input file duration in seconds to use for progress calculation, instead of trying to detect this automatically with FFprobe. Default: `None`.
+* `overwrite` — What to do if the output file already exists: `True` overwrites it, `False` raises `FfmpegCommandError`, and `None` asks whether to overwrite it. Ignored if the command contains `-y` or `-n`. Default: `None`.
 
 The `run` method accepts the following optional argument:
 * `print_command` — Print the FFmpeg command being executed. Default: `False`.

@@ -25,6 +25,7 @@ from .terminate_process import terminate_ffmpeg_process
 from .progress_bars import use_rich, use_tqdm
 
 _FFMPEG_OVERWRITE_FLAG = "-y"
+_FFMPEG_NO_OVERWRITE_FLAG = "-n"
 
 
 def _safe_filename(name: str) -> str:
@@ -68,6 +69,7 @@ class FfmpegProcess:
         ffmpeg_log_file: Optional[Union[str, os.PathLike]] = None,
         print_detected_duration: bool = False,
         duration_override: Optional[float] = None,
+        overwrite: Optional[bool] = None,
     ):
         """
         Create an FFmpeg process with progress reporting.
@@ -84,6 +86,10 @@ class FfmpegProcess:
             duration_override:
                 Specify input file duration in seconds to use for progress calculation, instead of trying to detect this automatically with FFprobe. This is useful for partial, damaged, streamed, or
                 synthetic inputs whose duration cannot be detected correctly.
+            overwrite:
+                What to do if the output file already exists. True overwrites it, False raises
+                FfmpegCommandError, and None (the default) asks the user. Ignored if the command
+                contains -y or -n.
         """
         validate_ffmpeg_command(command)
 
@@ -194,10 +200,26 @@ class FfmpegProcess:
         ]
         self._ffmpeg_command.extend(command[1:])
 
-        is_overwrite_in_user_command = any(arg == _FFMPEG_OVERWRITE_FLAG for arg in command[1:])
+        if overwrite is not None and not isinstance(overwrite, bool):
+            raise TypeError("overwrite must be True, False or None")
 
-        if self._output_filepath.exists() and not is_overwrite_in_user_command:
-            self._handle_overwrite_prompt()
+        user_args = command[1:]
+        if _FFMPEG_OVERWRITE_FLAG not in user_args and self._output_filepath.exists():
+            if _FFMPEG_NO_OVERWRITE_FLAG in user_args or overwrite is False:
+                raise FfmpegCommandError(
+                    f"Output file {self._output_filepath} already exists and overwriting is "
+                    "disabled."
+                )
+            elif overwrite:
+                self._ffmpeg_command.insert(1, _FFMPEG_OVERWRITE_FLAG)
+            elif is_stdin_input(input_file_path_str):
+                # Prompting would read from standard input, which carries FFmpeg's input.
+                raise FfmpegCommandError(
+                    f"Output file {self._output_filepath} already exists. Pass overwrite=True "
+                    "or add -y to the command to overwrite it."
+                )
+            else:
+                self._handle_overwrite_prompt()
 
         self._process: Optional[subprocess.Popen] = None
         self.use_tqdm: bool = False
