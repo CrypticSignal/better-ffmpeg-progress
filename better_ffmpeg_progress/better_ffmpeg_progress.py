@@ -18,11 +18,18 @@ from .utils import (
     get_media_duration,
     get_expected_output_duration,
     is_lavfi_input,
+    is_local_file_input,
+    is_stdin_input,
 )
 from .terminate_process import terminate_ffmpeg_process
 from .progress_bars import use_rich, use_tqdm
 
 _FFMPEG_OVERWRITE_FLAG = "-y"
+
+
+def _safe_filename(name: str) -> str:
+    """Replaces characters that are not valid in filenames on every OS."""
+    return re.sub(r"[^\w.,-]", "_", name)
 
 
 class FfmpegProcess:
@@ -117,10 +124,17 @@ class FfmpegProcess:
                 # A filtergraph such as "testsrc2=size=1920x1080" can contain characters that
                 # are not valid in filenames (e.g. ":" on Windows), so name the log after the
                 # source instead.
-                source_name = re.sub(r"[^\w.,-]", "_", input_file_path_str.split("=", 1)[0])
+                source_name = _safe_filename(input_file_path_str.split("=", 1)[0])
                 self._ffmpeg_log_file = Path(f"lavfi_{source_name}_ffmpeg_log.txt")
-            else:
+            elif input_file_path_str == "-":
+                self._ffmpeg_log_file = Path("stdin_ffmpeg_log.txt")
+            elif is_local_file_input(command, input_file_index):
                 self._ffmpeg_log_file = Path(f"{self._input_filepath.name}_ffmpeg_log.txt")
+            else:
+                # URLs and other protocols (e.g. "pipe:0") can contain characters that are not
+                # valid in filenames, such as ":" or "?".
+                name = self._input_filepath.name or input_file_path_str
+                self._ffmpeg_log_file = Path(f"{_safe_filename(name)}_ffmpeg_log.txt")
         elif isinstance(ffmpeg_log_file, (str, os.PathLike)):
             self._ffmpeg_log_file = Path(ffmpeg_log_file)
         else:
@@ -141,6 +155,9 @@ class FfmpegProcess:
                 raise ValueError("duration_override must be a finite number greater than 0")
 
             self._duration_secs = duration_value
+        elif is_stdin_input(input_file_path_str):
+            # Running FFprobe on standard input would consume data that is meant for FFmpeg.
+            self._duration_secs = None
         else:
             self._duration_secs = get_media_duration(input_file_path_str)
 
