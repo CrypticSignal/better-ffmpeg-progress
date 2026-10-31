@@ -1,8 +1,8 @@
 .tox
-*.txt
+*_ffmpeg_log.txt
 .DS_Store
 .vscode
-better_ffmpeg_progress.egg-info
+*.egg-info
 build/
 dist/
 ffmpeg_output/
@@ -28,3 +28,6 @@ __pycache__
 *.caf
 *.ogg
 *.opus
+.pytest_cache
+.ruff_cache
+.venv
