@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "better-ffmpeg-progress"
+dynamic = ["version"]
+description = "Run FFmpeg & see percentage progress + ETA."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "GitHub.com/CrypticSignal", email = "theaudiophile@outlook.com" }]
+requires-python = ">=3.9"
+dependencies = ["psutil", "rich", "tqdm"]
+keywords = ["ffmpeg", "progress"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/CrypticSignal/better-ffmpeg-progress"
+Changelog = "https://github.com/CrypticSignal/better-ffmpeg-progress/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["better_ffmpeg_progress"]
+
+[tool.setuptools.dynamic]
+version = { attr = "better_ffmpeg_progress.__version__" }
+
+[tool.setuptools.package-data]
+better_ffmpeg_progress = ["py.typed"]
