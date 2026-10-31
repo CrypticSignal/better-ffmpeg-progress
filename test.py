@@ -28,9 +28,8 @@ command = [
 
 try:
     # FFprobe cannot detect the duration of a lavfi source, so it is provided manually.
+    # Pass use_tqdm=True to use tqdm instead of Rich for the progress bar.
     process = FfmpegProcess(command, duration_override=DURATION_SECS)
-    # Uncomment the line below if you want to use tqdm instead of rich for the progress bar
-    # process.use_tqdm = True
 
     process.run()
 except FfmpegProcessError as e:

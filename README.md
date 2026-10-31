@@ -46,9 +46,8 @@ command = [
 ]
 
 try:
+    # Pass use_tqdm=True to use tqdm instead of Rich.
     process = FfmpegProcess(command)
-    # Uncomment this line to use tqdm instead of Rich.
-    # process.use_tqdm = True
 
     process.run()
 except FfmpegProcessError as e:
@@ -118,15 +117,15 @@ An instance of `FfmpegProcess` accepts the following optional arguments:
 * `ffmpeg_log_file` — Filepath or file-like object to which FFmpeg stderr will be written. Default: `<input filename>_ffmpeg_log.txt`.
 * `print_detected_duration` — Print the detected duration. Default: `False`.
 * `duration_override` — Specify input file duration in seconds to use for progress calculation, instead of trying to detect this automatically with FFprobe. Default: `None`.
+* `use_tqdm` — Use tqdm instead of Rich for the progress bar. Default: `False`.
 * `overwrite` — What to do if the output file already exists: `True` overwrites it, `False` raises `FfmpegCommandError`, and `None` asks whether to overwrite it. Ignored if the command contains `-y` or `-n`. Default: `None`.
 
 The `run` method accepts the following optional argument:
 * `print_command` — Print the FFmpeg command being executed. Default: `False`.
 
 ## Using tqdm
-By default, the [Rich](https://github.com/Textualize/rich) library is used to display a progress bar. [tqdm](https://github.com/tqdm/tqdm) can be used instead by setting `process.use_tqdm = True`:
+By default, the [Rich](https://github.com/Textualize/rich) library is used to display a progress bar. [tqdm](https://github.com/tqdm/tqdm) can be used instead by passing `use_tqdm=True`:
 ```python
-process = FfmpegProcess(command)
-process.use_tqdm = True
+process = FfmpegProcess(command, use_tqdm=True)
 process.run()
 ```

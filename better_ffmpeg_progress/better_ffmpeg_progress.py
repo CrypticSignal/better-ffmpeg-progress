@@ -70,6 +70,7 @@ class FfmpegProcess:
         print_detected_duration: bool = False,
         duration_override: Optional[float] = None,
         overwrite: Optional[bool] = None,
+        use_tqdm: bool = False,
     ):
         """
         Create an FFmpeg process with progress reporting.
@@ -90,6 +91,8 @@ class FfmpegProcess:
                 What to do if the output file already exists. True overwrites it, False raises
                 FfmpegCommandError, and None (the default) asks the user. Ignored if the command
                 contains -y or -n.
+            use_tqdm:
+                Use tqdm instead of Rich for the progress bar.
         """
         validate_ffmpeg_command(command)
 
@@ -222,7 +225,7 @@ class FfmpegProcess:
                 self._handle_overwrite_prompt()
 
         self._process: Optional[subprocess.Popen] = None
-        self.use_tqdm: bool = False
+        self.use_tqdm: bool = use_tqdm
 
     def run(
         self,
