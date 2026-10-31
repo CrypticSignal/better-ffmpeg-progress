@@ -1,8 +1,9 @@
 import os
 import psutil
 import subprocess
-from sys import exit
 from typing import Optional
+
+from .exceptions import FfmpegProcessError
 
 _TERMINATION_TIMEOUT = 2
 
@@ -222,6 +223,8 @@ def terminate_ffmpeg_process(process: Optional[subprocess.Popen]):
         print(f"Unexpected error during main process termination for {original_pid}: {e}")
 
     if process.poll() is None:
-        exit("It seems like the FFmpeg process has not terminated.")
+        raise FfmpegProcessError(
+            f"FFmpeg process (PID: {original_pid}) could not be terminated."
+        )
     else:
         print(f"FFmpeg process (PID: {original_pid}) terminated.")

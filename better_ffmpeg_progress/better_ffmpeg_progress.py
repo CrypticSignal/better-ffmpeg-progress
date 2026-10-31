@@ -4,7 +4,6 @@ import re
 import shlex
 from pathlib import Path
 import subprocess
-from sys import exit
 from typing import List, Optional, Union
 
 from .enums import FfmpegLogLevel
@@ -229,14 +228,11 @@ class FfmpegProcess:
                 use_tqdm(self, self._process)
             else:
                 use_rich(self, self._process)
-        except KeyboardInterrupt:
-            self._terminate()
+        except KeyboardInterrupt as e:
+            terminate_ffmpeg_process(self._process)
+            raise FfmpegProcessInterruptedError(
+                "[KeyboardInterrupt] FFmpeg process cancelled."
+            ) from e
         finally:
             if self._process and self._process.stdout:
                 self._process.stdout.close()
-
-    def _terminate(self):
-        if self._process:
-            terminate_ffmpeg_process(self._process)
-        else:
-            exit()
