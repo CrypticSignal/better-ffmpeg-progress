@@ -4,7 +4,6 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
-import requests  # Added for URL validation
 
 from .exceptions import FfmpegCommandError
 
@@ -108,13 +107,7 @@ def validate_ffmpeg_command(command: List[str]) -> None:
 
     # Validate the input. Only local file paths can be checked: inputs such as standard input,
     # network streams, devices and lavfi filtergraphs are left for FFmpeg to validate.
-    if input_file.startswith("http://") or input_file.startswith("https://"):
-        try:
-            response = requests.head(input_file, timeout=5, allow_redirects=True)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            raise FfmpegCommandError(f"Input URL not accessible: {input_file}. Error: {e}")
-    elif (
+    if (
         is_local_file_input(command, input_flag_pos)
         and not Path(input_file).exists()
         and not _SEQUENCE_PATTERN_RE.search(input_file)
