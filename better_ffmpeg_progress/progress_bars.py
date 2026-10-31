@@ -44,6 +44,16 @@ def _with_size(text: str, current_size_mb: float, estimated_size_mb: Optional[fl
     return f"{text} {size}" if size else text
 
 
+def _drain(process: subprocess.Popen) -> None:
+    """
+    Reads FFmpeg's progress output until it ends. FFmpeg writes it to a pipe, so it must be read
+    even when it is not displayed: once the pipe's buffer is full, FFmpeg blocks and never exits.
+    """
+    if process.stdout is not None:
+        for _ in process.stdout:
+            pass
+
+
 def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen) -> None:
     task_id = None
     progress_bar_instance = Progress(
@@ -94,6 +104,7 @@ def use_rich(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                     )
         else:
             print(f"Processing '{input_filename}'...")
+            _drain(process)
 
         process.wait()
 
@@ -161,6 +172,7 @@ def use_tqdm(ffmpeg_process_instance: "FfmpegProcess", process: subprocess.Popen
                 progress_bar.set_postfix_str(_format_size(current_size_mb, estimated_size_mb))
     else:
         print(f"Processing '{input_filename}'...")
+        _drain(process)
 
     process.wait()
 
