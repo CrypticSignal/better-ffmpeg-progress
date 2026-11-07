@@ -11,7 +11,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "GitHub.com/CrypticSignal", email = "theaudiophile@outlook.com" }]
 requires-python = ">=3.9"
-dependencies = ["psutil", "rich", "tqdm"]
+dependencies = ["rich", "tqdm"]
 keywords = ["ffmpeg", "progress"]
 classifiers = [
     "Programming Language :: Python :: 3",

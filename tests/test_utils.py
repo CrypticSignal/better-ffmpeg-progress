@@ -9,9 +9,8 @@ from better_ffmpeg_progress.utils import (
     get_input_format,
     is_lavfi_input,
     is_local_file_input,
-    parse_ffmpeg_progress_line,
     parse_ffmpeg_time,
-    parse_ffmpeg_total_size_line,
+    read_progress,
     truncate_filename,
 )
 
@@ -60,18 +59,18 @@ def test_get_expected_output_duration(args, expected):
     assert get_expected_output_duration(command, 100.0) == pytest.approx(expected)
 
 
-def test_parse_ffmpeg_progress_line():
-    assert parse_ffmpeg_progress_line(b"out_time_us=1500000", None) == pytest.approx(1.5)
-    assert parse_ffmpeg_progress_line(b"out_time_us=1500000", 1.0) == 1.0
-    assert parse_ffmpeg_progress_line(b"out_time_us=N/A", 10.0) is None
-    assert parse_ffmpeg_progress_line(b"out_time_us=", 10.0) is None
-    assert parse_ffmpeg_progress_line(b"frame=10", 10.0) is None
-
-
-def test_parse_ffmpeg_total_size_line():
-    assert parse_ffmpeg_total_size_line(b"total_size=1048576") == 1.0
-    assert parse_ffmpeg_total_size_line(b"total_size=N/A") is None
-    assert parse_ffmpeg_total_size_line(b"out_time_us=1") is None
+def test_read_progress():
+    lines = [
+        b"frame=10\n",
+        b"total_size=N/A\n",
+        b"out_time_us=N/A\n",
+        b"out_time_us=500000\n",
+        b"total_size=1048576\n",
+        b"out_time_us=1500000\n",
+        b"total_size=2097152\n",
+        b"out_time_us=5000000\n",
+    ]
+    assert list(read_progress(lines, 2.0)) == [(0.5, 0.0), (1.5, 1.0), (2.0, 2.0)]
 
 
 def test_truncate_filename():
