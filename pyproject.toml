@@ -10,11 +10,17 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "GitHub.com/CrypticSignal", email = "theaudiophile@outlook.com" }]
-requires-python = ">=3.9"
-dependencies = ["rich", "tqdm"]
+requires-python = ">=3.11"
+dependencies = ["rich"]
 keywords = ["ffmpeg", "progress"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video :: Conversion",
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
@@ -24,7 +30,9 @@ Homepage = "https://github.com/CrypticSignal/better-ffmpeg-progress"
 Changelog = "https://github.com/CrypticSignal/better-ffmpeg-progress/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-test = ["pytest"]
+tqdm = ["tqdm"]
+test = ["pytest", "tqdm"]
+dev = ["better-ffmpeg-progress[test]", "mypy", "ruff", "types-tqdm"]
 
 [tool.setuptools]
 packages = ["better_ffmpeg_progress"]
@@ -37,3 +45,8 @@ better_ffmpeg_progress = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+files = ["better_ffmpeg_progress"]
+python_version = "3.11"
+strict = true

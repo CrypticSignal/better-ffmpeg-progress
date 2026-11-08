@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -46,8 +47,10 @@ def test_run_succeeds(input_file: Path, tmp_path: Path, use_tqdm: bool):
         ffmpeg_log_file=log_file,
         use_tqdm=use_tqdm,
     )
-    assert process._duration_secs == pytest.approx(2, abs=0.2)
+    # Nothing is detected until run() is called.
+    assert process._duration_secs is None
     process.run()
+    assert process._duration_secs == pytest.approx(2, abs=0.2)
     assert output_file.stat().st_size > 0
     assert log_file.exists()
 
@@ -70,8 +73,8 @@ def test_run_without_duration_does_not_hang(tmp_path: Path):
         ],
         ffmpeg_log_file=tmp_path / "log.txt",
     )
-    assert process._duration_secs is None
     process.run()
+    assert process._duration_secs is None
 
 
 def test_failure_includes_log_tail(input_file: Path, tmp_path: Path):
@@ -115,19 +118,23 @@ def test_image_sequence_input_is_accepted(tmp_path: Path):
 def test_overwrite(input_file: Path, tmp_path: Path):
     output_file = tmp_path / "output.mkv"
     output_file.touch()
-    command = ["ffmpeg", "-i", str(input_file), str(output_file)]
+    command = ["ffmpeg", "-i", str(input_file), "-c", "copy", str(output_file)]
+    log_file = tmp_path / "log.txt"
 
     with pytest.raises(FfmpegCommandError, match="already exists"):
-        FfmpegProcess(command, overwrite=False)
+        FfmpegProcess(command, overwrite=False, ffmpeg_log_file=log_file).run()
 
     with pytest.raises(FfmpegCommandError, match="already exists"):
-        FfmpegProcess(command[:-1] + ["-n", str(output_file)])
+        FfmpegProcess(command[:-1] + ["-n", str(output_file)], ffmpeg_log_file=log_file).run()
+    assert output_file.stat().st_size == 0
 
-    process = FfmpegProcess(command, overwrite=True)
-    assert "-y" in process._ffmpeg_command
+    FfmpegProcess(command, overwrite=True, ffmpeg_log_file=log_file).run()
+    assert output_file.stat().st_size > 0
 
     # -y in the command takes priority over overwrite=False.
-    FfmpegProcess(command[:-1] + ["-y", str(output_file)], overwrite=False)
+    FfmpegProcess(
+        command[:-1] + ["-y", str(output_file)], overwrite=False, ffmpeg_log_file=log_file
+    ).run()
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Uses POSIX signals")
@@ -151,3 +158,163 @@ def test_keyboard_interrupt_raises_and_does_not_kill_python(tmp_path: Path):
         timer.cancel()
     assert process._process is not None
     assert process._process.poll() is not None
+
+
+def test_progress_callback(input_file: Path, tmp_path: Path):
+    calls = []
+    FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "ffv1", str(tmp_path / "out.mkv")],
+        ffmpeg_log_file=tmp_path / "log.txt",
+        progress_callback=lambda *args: calls.append(args),
+    ).run()
+    assert calls
+    secs, duration, size_mb = calls[-1]
+    assert duration == pytest.approx(2, abs=0.2)
+    assert 0 <= secs <= duration
+    assert size_mb > 0
+
+
+def test_progress_callback_without_duration(tmp_path: Path):
+    calls = []
+    FfmpegProcess(
+        ["ffmpeg", "-f", "lavfi", "-i", "testsrc2=duration=1:size=32x32", "-f", "null", "-"],
+        ffmpeg_log_file=tmp_path / "log.txt",
+        progress_callback=lambda *args: calls.append(args),
+    ).run()
+    assert calls
+    assert all(duration is None for _, duration, _ in calls)
+
+
+def test_progress_callback_exception_stops_ffmpeg(tmp_path: Path):
+    def callback(secs, duration, size_mb):
+        raise RuntimeError("stop")
+
+    process = FfmpegProcess(
+        ["ffmpeg", "-re", "-f", "lavfi", "-i", "testsrc2=duration=30", "-f", "null", "-"],
+        ffmpeg_log_file=tmp_path / "log.txt",
+        duration_override=30,
+        progress_callback=callback,
+    )
+    with pytest.raises(RuntimeError, match="stop"):
+        process.run()
+    assert process._process is not None
+    assert process._process.poll() is not None
+
+
+def test_quiet(input_file: Path, tmp_path: Path, capsys):
+    FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "ffv1", str(tmp_path / "out.mkv")],
+        ffmpeg_log_file=tmp_path / "log.txt",
+        duration_override=2,
+        quiet=True,
+    ).run()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_failure_sets_error_attributes(input_file: Path, tmp_path: Path):
+    log_file = tmp_path / "log.txt"
+    process = FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "no_such_encoder", str(tmp_path / "o.mkv")],
+        ffmpeg_log_file=log_file,
+    )
+    with pytest.raises(FfmpegProcessError) as exc_info:
+        process.run()
+    assert exc_info.value.returncode not in (None, 0)
+    assert exc_info.value.log_file == log_file
+
+
+@pytest.mark.parametrize("delete", [False, True])
+def test_delete_log_on_success(input_file: Path, tmp_path: Path, delete: bool):
+    log_file = tmp_path / "log.txt"
+    FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "ffv1", str(tmp_path / "out.mkv")],
+        ffmpeg_log_file=log_file,
+        delete_log_on_success=delete,
+    ).run()
+    assert log_file.exists() != delete
+
+
+def test_delete_log_on_success_keeps_log_on_failure(input_file: Path, tmp_path: Path):
+    log_file = tmp_path / "log.txt"
+    with pytest.raises(FfmpegProcessError):
+        FfmpegProcess(
+            ["ffmpeg", "-i", str(input_file), "-c:v", "no_such_encoder", str(tmp_path / "o.mkv")],
+            ffmpeg_log_file=log_file,
+            delete_log_on_success=True,
+        ).run()
+    assert log_file.exists()
+
+
+def test_delete_log_on_success_never_deletes_devnull(input_file: Path, tmp_path: Path):
+    FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "ffv1", str(tmp_path / "out.mkv")],
+        ffmpeg_log_file=os.devnull,
+        delete_log_on_success=True,
+    ).run()
+    assert os.path.exists(os.devnull)
+
+
+def test_missing_tqdm(monkeypatch, input_file: Path, tmp_path: Path):
+    monkeypatch.setitem(sys.modules, "tqdm", None)
+    with pytest.raises(FfmpegCommandError, match=r"better-ffmpeg-progress\[tqdm\]"):
+        FfmpegProcess(["ffmpeg", "-i", str(input_file), str(tmp_path / "o.mkv")], use_tqdm=True)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Standard output is not supported on Windows")
+def test_output_to_stdout(input_file: Path, tmp_path: Path, capfdbinary):
+    FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "ffv1", "-f", "matroska", "-"],
+        ffmpeg_log_file=tmp_path / "log.txt",
+    ).run()
+    captured = capfdbinary.readouterr()
+    # Standard output carries only the Matroska file, which starts with the EBML magic number.
+    assert captured.out.startswith(b"\x1a\x45\xdf\xa3")
+    assert b"out_time_us" not in captured.out
+    # The progress bar is written to standard error instead.
+    assert b"Processed" in captured.err
+
+
+def test_ffmpeg_does_not_read_python_stdin(tmp_path: Path):
+    script = (
+        "import sys\n"
+        "from better_ffmpeg_progress import FfmpegProcess\n"
+        "FfmpegProcess(['ffmpeg', '-re', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=32x32',"
+        " '-f', 'null', '-'], duration_override=1, ffmpeg_log_file=sys.argv[1]).run()\n"
+        "sys.stderr.buffer.write(sys.stdin.buffer.read())\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(tmp_path / "log.txt")],
+        input=b"data meant for Python\n",
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert result.stderr.endswith(b"data meant for Python\n")
+
+
+@pytest.mark.parametrize("use_tqdm", [False, True])
+@pytest.mark.parametrize("duration_override", [None, 1])
+def test_non_utf8_stdout(tmp_path: Path, use_tqdm: bool, duration_override):
+    # e.g. standard output redirected on Windows, whose encoding is usually cp1252.
+    script = (
+        "import sys\n"
+        "from better_ffmpeg_progress import FfmpegProcess\n"
+        "FfmpegProcess(['ffmpeg', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=32x32',"
+        " '-f', 'null', '-'], ffmpeg_log_file=sys.argv[1], use_tqdm=sys.argv[2] == 'True',"
+        " duration_override=None if sys.argv[3] == 'None' else 1).run()\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(tmp_path / "log.txt"),
+            str(use_tqdm),
+            str(duration_override),
+        ],
+        capture_output=True,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert b"OK Processed" in result.stdout + result.stderr
