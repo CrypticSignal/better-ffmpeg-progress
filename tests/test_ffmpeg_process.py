@@ -282,7 +282,7 @@ def test_ffmpeg_does_not_read_python_stdin(tmp_path: Path):
         "from better_ffmpeg_progress import FfmpegProcess\n"
         "FfmpegProcess(['ffmpeg', '-re', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=32x32',"
         " '-f', 'null', '-'], duration_override=1, ffmpeg_log_file=sys.argv[1]).run()\n"
-        "sys.stderr.write(sys.stdin.read())\n"
+        "sys.stderr.buffer.write(sys.stdin.buffer.read())\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", script, str(tmp_path / "log.txt")],
