@@ -18,7 +18,8 @@ jobs:
       - run: ruff format --check better_ffmpeg_progress tests test.py
 
   test:
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04 has no Python 3.9 build for actions/setup-python.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
