@@ -79,7 +79,8 @@ def test_failure_includes_log_tail(input_file: Path, tmp_path: Path):
         ["ffmpeg", "-i", str(input_file), "-c:v", "no_such_encoder", str(tmp_path / "o.mkv")],
         ffmpeg_log_file=tmp_path / "log.txt",
     )
-    with pytest.raises(FfmpegProcessError, match="no_such_encoder"):
+    # FFmpeg's error wording varies between versions, so only check that the log tail is included.
+    with pytest.raises(FfmpegProcessError, match="Last lines of the log:\n."):
         process.run()
 
 

@@ -1,4 +1,4 @@
-__version__ = "6.0.0"
+__version__ = "6.0.1"
 
 from .better_ffmpeg_progress import FfmpegProcess
 from .enums import FfmpegLogLevel

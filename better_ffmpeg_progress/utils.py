@@ -4,15 +4,12 @@ import shutil
 import subprocess
 from collections import deque
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .exceptions import FfmpegCommandError
 
 _FFMPEG_INPUT_FLAG = "-i"
-_OUT_TIME_US_PREFIX = b"out_time_us="
-_TOTAL_SIZE_PREFIX = b"total_size="
 _BYTES_PER_MB = 1024 * 1024
-_MULTIPLIER = 1e-6
 
 
 # A protocol prefix such as "pipe:", "rtsp://" or "concat:". At least two characters are required
@@ -153,34 +150,27 @@ def get_media_duration(input_file: str) -> Optional[float]:
         return None
 
 
-def parse_ffmpeg_progress_line(
-    line: bytes, total_duration_secs: Optional[float]
-) -> Optional[float]:
+def read_progress(lines: Iterable[bytes], duration_secs: float) -> Iterator[Tuple[float, float]]:
     """
-    Parses a progress line from FFmpeg's stdout.
-    Example line: b"out_time_us=12345678"
-    Returns the current progress time in seconds, or None if parsing fails or line is not a progress line.
-    Caps progress at total_duration_secs if provided.
-    Assumes `line` has already been stripped of leading/trailing whitespace.
+    Reads FFmpeg's "-progress" output, which consists of "key=value" lines such as
+    b"total_size=12345678" and b"out_time_us=12345678".
+    Yields (seconds processed, output size in MB) each time FFmpeg reports its progress.
+    The seconds processed are capped at duration_secs.
     """
-    if line.startswith(_OUT_TIME_US_PREFIX):
+    size_mb = 0.0
+    for line in lines:
+        key, _, value = line.strip().partition(b"=")
         try:
-            # Get the value after out_time_us=
-            value_str = line[len(_OUT_TIME_US_PREFIX) :]
+            number = int(value)
+        except ValueError:  # e.g. "N/A"
+            continue
 
-            if not value_str:
-                return None
-
-            current_time_us = int(value_str)
-            current_time_secs = current_time_us * _MULTIPLIER
-
-            if total_duration_secs is not None:
-                return min(current_time_secs, total_duration_secs)
-            return current_time_secs
-        except (ValueError, IndexError):
-            return None
-
-    return None
+        # FFmpeg writes total_size before out_time_us in each block of progress output,
+        # so each yielded value includes the latest size.
+        if key == b"total_size":
+            size_mb = number / _BYTES_PER_MB
+        elif key == b"out_time_us":
+            yield min(number / 1_000_000, duration_secs), size_mb
 
 
 # Matches FFmpeg's time duration syntax: [-][HH:]MM:SS[.m...] or [-]S+[.m...][s|ms|us]
@@ -267,27 +257,6 @@ def get_expected_output_duration(command: List[str], input_duration: float) -> f
 
     # Never return 0, which would disable the progress bar.
     return duration if duration > 0 else input_duration
-
-
-def parse_ffmpeg_total_size_line(line: bytes) -> Optional[float]:
-    """
-    Parses a total_size line from FFmpeg's stdout.
-    Example line: b"total_size=12345678"
-    Returns the current output size in MB, or None if parsing fails or line is not a total_size line.
-    Assumes `line` has already been stripped of leading/trailing whitespace.
-    """
-    if line.startswith(_TOTAL_SIZE_PREFIX):
-        try:
-            value_str = line[len(_TOTAL_SIZE_PREFIX) :]
-
-            if not value_str:
-                return None
-
-            return int(value_str) / _BYTES_PER_MB
-        except ValueError:
-            return None
-
-    return None
 
 
 def truncate_filename(filename: str, max_length: int = 60) -> str:

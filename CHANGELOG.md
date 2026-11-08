@@ -202,3 +202,10 @@
   - Termination diagnostics are now logged with the `logging` module instead of printed.
   - Replaced `setup.py` with `pyproject.toml`, added a `py.typed` marker and `better_ffmpeg_progress.__version__`.
   - Added pytest tests and a GitHub Actions workflow, replacing `tox.ini`.
+
+[08/11/2026]
+
+- [v6.0.1]
+  - Removed the `psutil` dependency. Ctrl+C handling is simpler: FFmpeg already runs in its own process group, so on Linux and macOS the group is sent `SIGTERM`, then `SIGKILL` if it has not exited within 2 seconds. On Windows, the process is terminated directly. Termination is no longer logged with the `logging` module.
+  - When the duration is unknown, `✓ Processed '<filename>'` is now printed when using Rich too, not only tqdm. Rich's description now quotes the filename, like tqdm's.
+  - Simplified the internals: the Rich and tqdm progress bars share the code that reads FFmpeg's progress output, and `FfmpegProcess` is split into smaller functions. The public API is unchanged.
