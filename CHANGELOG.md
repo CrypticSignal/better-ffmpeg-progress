@@ -203,7 +203,7 @@
   - Replaced `setup.py` with `pyproject.toml`, added a `py.typed` marker and `better_ffmpeg_progress.__version__`.
   - Added pytest tests and a GitHub Actions workflow, replacing `tox.ini`.
 
-[07/11/2026]
+[08/11/2026]
 
 - [v6.0.1]
   - Removed the `psutil` dependency. Ctrl+C handling is simpler: FFmpeg already runs in its own process group, so on Linux and macOS the group is sent `SIGTERM`, then `SIGKILL` if it has not exited within 2 seconds. On Windows, the process is terminated directly. Termination is no longer logged with the `logging` module.
