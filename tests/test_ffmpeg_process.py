@@ -288,6 +288,33 @@ def test_ffmpeg_does_not_read_python_stdin(tmp_path: Path):
         [sys.executable, "-c", script, str(tmp_path / "log.txt")],
         input=b"data meant for Python\n",
         capture_output=True,
-        check=True,
     )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
     assert result.stderr.endswith(b"data meant for Python\n")
+
+
+@pytest.mark.parametrize("use_tqdm", [False, True])
+@pytest.mark.parametrize("duration_override", [None, 1])
+def test_non_utf8_stdout(tmp_path: Path, use_tqdm: bool, duration_override):
+    # e.g. standard output redirected on Windows, whose encoding is usually cp1252.
+    script = (
+        "import sys\n"
+        "from better_ffmpeg_progress import FfmpegProcess\n"
+        "FfmpegProcess(['ffmpeg', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=32x32',"
+        " '-f', 'null', '-'], ffmpeg_log_file=sys.argv[1], use_tqdm=sys.argv[2] == 'True',"
+        " duration_override=None if sys.argv[3] == 'None' else 1).run()\n"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(tmp_path / "log.txt"),
+            str(use_tqdm),
+            str(duration_override),
+        ],
+        capture_output=True,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert b"OK Processed" in result.stdout + result.stderr

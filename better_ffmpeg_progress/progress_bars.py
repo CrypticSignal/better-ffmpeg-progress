@@ -24,6 +24,18 @@ def _format_size(current_size_mb: float, estimated_size_mb: float | None) -> str
     return f"({current_size_mb:.2f} MB / ~{estimated_size_mb:.2f} MB)"
 
 
+def _done_mark(stream: TextIO) -> str:
+    """
+    Returns "✓", or "OK" if the stream cannot encode it, e.g. when standard output is redirected
+    on Windows, where its encoding is usually cp1252.
+    """
+    try:
+        "✓".encode(getattr(stream, "encoding", None) or "utf-8")
+    except (UnicodeEncodeError, LookupError):
+        return "OK"
+    return "✓"
+
+
 def _with_size(text: str, current_size_mb: float, estimated_size_mb: float | None) -> str:
     size = _format_size(current_size_mb, estimated_size_mb)
     return f"{text} {size}" if size else text
@@ -60,13 +72,14 @@ class TextDisplay(ProgressDisplay):
     def __init__(self, filename: str, stream: TextIO) -> None:
         self._filename = filename
         self._stream = stream
+        self._done = _done_mark(stream)
 
     def __enter__(self) -> TextDisplay:
         print(f"Processing '{self._filename}'...", file=self._stream, flush=True)
         return self
 
     def complete(self, size_mb: float) -> None:
-        print(f"✓ Processed '{self._filename}'", file=self._stream, flush=True)
+        print(f"{self._done} Processed '{self._filename}'", file=self._stream, flush=True)
 
 
 class RichDisplay(ProgressDisplay):
@@ -84,6 +97,7 @@ class RichDisplay(ProgressDisplay):
         self._filename = filename
         self._duration_secs = duration_secs
         self._description = f"Processing '{filename}'"
+        self._done = _done_mark(stream)
         self._progress_bar: Progress = Progress(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
@@ -124,7 +138,7 @@ class RichDisplay(ProgressDisplay):
         self._progress_bar.update(
             self._task_id,
             completed=self._duration_secs,
-            description=_with_size(f"✓ Processed '{self._filename}'", size_mb, None),
+            description=_with_size(f"{self._done} Processed '{self._filename}'", size_mb, None),
         )
 
 
@@ -134,6 +148,7 @@ class TqdmDisplay(ProgressDisplay):
 
         self._filename = filename
         self._duration_secs = duration_secs
+        self._done = _done_mark(stream)
         terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
         self._progress_bar: tqdm[Any] = tqdm(
             mininterval=0.5,
@@ -162,7 +177,7 @@ class TqdmDisplay(ProgressDisplay):
 
     def complete(self, size_mb: float) -> None:
         self._progress_bar.n = self._duration_secs
-        self._progress_bar.set_description(f"✓ Processed '{self._filename}'")
+        self._progress_bar.set_description(f"{self._done} Processed '{self._filename}'")
         self._progress_bar.set_postfix_str(_format_size(size_mb, None))
 
 

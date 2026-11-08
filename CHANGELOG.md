@@ -220,6 +220,7 @@
   - Fixed FFmpeg reading the Python program's standard input, which consumed data piped into the program and could change the terminal's settings. FFmpeg now gets its own standard input pipe, unless its input is standard input.
   - Ctrl+C now stops FFmpeg the way pressing `q` does, so it finishes writing the output file (e.g. MP4 files stay playable), on Windows too. FFmpeg is only terminated if it has not stopped within 5 seconds.
   - Fixed writing the output to standard output (e.g. `-f mpegts -`) on Linux and macOS: FFmpeg's progress is now read from a separate pipe, and the progress bar is shown on standard error. This raises `FfmpegCommandError` on Windows.
+  - Fixed a `UnicodeEncodeError` after FFmpeg succeeded when standard output cannot encode `✓` (e.g. when it is redirected on Windows). `OK` is shown instead.
   - FFprobe is now looked for next to the FFmpeg executable before `PATH`, and is given 30 seconds to finish.
   - Added the `quiet`, `progress_callback` and `delete_log_on_success` parameters.
   - `FfmpegProcessError` now has `returncode` and `log_file` attributes.
