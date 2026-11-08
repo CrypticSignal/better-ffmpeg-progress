@@ -209,3 +209,18 @@
   - Removed the `psutil` dependency. Ctrl+C handling is simpler: FFmpeg already runs in its own process group, so on Linux and macOS the group is sent `SIGTERM`, then `SIGKILL` if it has not exited within 2 seconds. On Windows, the process is terminated directly. Termination is no longer logged with the `logging` module.
   - When the duration is unknown, `✓ Processed '<filename>'` is now printed when using Rich too, not only tqdm. Rich's description now quotes the filename, like tqdm's.
   - Simplified the internals: the Rich and tqdm progress bars share the code that reads FFmpeg's progress output, and `FfmpegProcess` is split into smaller functions. The public API is unchanged.
+
+[08/11/2026]
+
+- [v7.0.0]
+  - **Breaking:** Python 3.11 or newer is now required. Python 3.9 and 3.10 are end-of-life. Python 3.14 is now tested.
+  - **Breaking:** tqdm is now an optional dependency. Install it with `pip install better-ffmpeg-progress[tqdm]` to use `use_tqdm=True`; otherwise `FfmpegCommandError` is raised.
+  - **Breaking:** Creating an `FfmpegProcess` no longer runs FFprobe or asks whether to overwrite the output file. Both now happen in `run()`, so the existing-output checks (including `overwrite=False` and `-n`) raise from `run()`.
+  - **Breaking:** Warnings such as "Could not determine the duration" are now logged with the `better_ffmpeg_progress` logger instead of printed.
+  - Fixed FFmpeg reading the Python program's standard input, which consumed data piped into the program and could change the terminal's settings. FFmpeg now gets its own standard input pipe, unless its input is standard input.
+  - Ctrl+C now stops FFmpeg the way pressing `q` does, so it finishes writing the output file (e.g. MP4 files stay playable), on Windows too. FFmpeg is only terminated if it has not stopped within 5 seconds.
+  - Fixed writing the output to standard output (e.g. `-f mpegts -`) on Linux and macOS: FFmpeg's progress is now read from a separate pipe, and the progress bar is shown on standard error. This raises `FfmpegCommandError` on Windows.
+  - FFprobe is now looked for next to the FFmpeg executable before `PATH`, and is given 30 seconds to finish.
+  - Added the `quiet`, `progress_callback` and `delete_log_on_success` parameters.
+  - `FfmpegProcessError` now has `returncode` and `log_file` attributes.
+  - Added mypy (strict) and more ruff rules to CI.

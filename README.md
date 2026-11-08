@@ -119,27 +119,77 @@ An instance of `FfmpegProcess` accepts the following optional arguments:
 * `duration_override` — Specify input file duration in seconds to use for progress calculation, instead of trying to detect this automatically with FFprobe. Default: `None`.
 * `use_tqdm` — Use tqdm instead of Rich for the progress bar. Default: `False`.
 * `overwrite` — What to do if the output file already exists: `True` overwrites it, `False` raises `FfmpegCommandError`, and `None` asks whether to overwrite it. Ignored if the command contains `-y` or `-n`. Default: `None`.
+* `quiet` — Do not show a progress bar or status messages. Default: `False`.
+* `progress_callback` — A function to call each time FFmpeg reports its progress. See [Progress callback](#progress-callback). Default: `None`.
+* `delete_log_on_success` — Delete the FFmpeg log file if FFmpeg succeeds. Default: `False`.
+
+Creating an `FfmpegProcess` only validates the command. FFprobe is run, and you are asked whether to overwrite an existing output file, when `run()` is called.
 
 The `run` method accepts the following optional argument:
 * `print_command` — Print the FFmpeg command being executed. Default: `False`.
 
 ## Using tqdm
-By default, the [Rich](https://github.com/Textualize/rich) library is used to display a progress bar. [tqdm](https://github.com/tqdm/tqdm) can be used instead by passing `use_tqdm=True`:
+By default, the [Rich](https://github.com/Textualize/rich) library is used to display a progress bar. [tqdm](https://github.com/tqdm/tqdm) can be used instead by passing `use_tqdm=True`. tqdm is an optional dependency, installed with:
+```bash
+pip install "better-ffmpeg-progress[tqdm]" --upgrade
+```
 ```python
 process = FfmpegProcess(command, use_tqdm=True)
 process.run()
 ```
+
+## Progress callback
+To show progress in your own UI (e.g. a GUI or a web app), pass a function as `progress_callback`. It is called with the number of seconds processed, the expected output duration in seconds (`None` if it is unknown) and the current output size in MB. Combine it with `quiet=True` to hide the progress bar:
+```python
+def on_progress(secs: float, duration: float | None, size_mb: float) -> None:
+    if duration:
+        print(f"{secs / duration:.0%}")
+
+FfmpegProcess(command, quiet=True, progress_callback=on_progress).run()
+```
+If the callback raises an exception, FFmpeg is stopped and the exception is propagated by `run()`.
+
+## Errors
+All exceptions raised by the package are subclasses of `FfmpegProcessError`, which has these attributes:
+* `returncode` — FFmpeg's exit code, or `None` if FFmpeg was not started or had not exited.
+* `log_file` — The path or file object that FFmpeg's log was written to.
+
+Pressing Ctrl+C raises `FfmpegProcessInterruptedError`. FFmpeg is first asked to stop the way pressing `q` does, so it can finish writing the output file, e.g. an MP4 file stays playable. If it does not stop within 5 seconds, it is terminated.
+
+## Logging
+Warnings, such as when the input duration cannot be detected, are logged with the `logging` module using the `better_ffmpeg_progress` logger. Without any logging configuration, Python prints them to standard error. To hide them:
+```python
+import logging
+
+logging.getLogger("better_ffmpeg_progress").setLevel(logging.ERROR)
+```
+
+## Writing to standard output
+On Linux and macOS, the output can be written to standard output, e.g. `-f mpegts -`, to pipe it to another program. The progress bar is then shown on standard error. This is not supported on Windows, where FFmpeg's progress is read from its standard output.
+
+## Duration detection
+FFprobe is looked for next to the FFmpeg executable first (e.g. `/opt/ffmpeg/bin/ffprobe` for `/opt/ffmpeg/bin/ffmpeg`), then in `PATH`. If it does not finish within 30 seconds, e.g. for an unresponsive URL, the duration is treated as unknown.
 ## Limitations
 - Progress is calculated from the duration of the first input (the first `-i`).
 - The last argument of the command is treated as the output file, e.g. when checking whether it already exists. With multiple outputs, only the last one is checked.
 
 ## Development
-Install the package in editable mode with the test dependencies, then run the tests (FFmpeg and FFprobe must be installed):
+Install the package in editable mode with the development dependencies, then run the tests (FFmpeg and FFprobe must be installed):
 ```bash
-pip install -e ".[test]"
+pip install -e ".[dev]"
 ```
 ```bash
 pytest
+```
+Lint, format and type-check the code like CI does:
+```bash
+ruff check .
+```
+```bash
+ruff format --check better_ffmpeg_progress tests test.py
+```
+```bash
+mypy
 ```
 `test.py` is a standalone example that encodes a test pattern and shows the progress bar.
 

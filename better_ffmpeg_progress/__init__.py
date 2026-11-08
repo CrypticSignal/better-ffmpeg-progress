@@ -1,12 +1,12 @@
-__version__ = "6.0.1"
+__version__ = "7.0.0"
 
 from .better_ffmpeg_progress import FfmpegProcess
 from .enums import FfmpegLogLevel
 from .exceptions import (
-    FfmpegProcessError,
     FfmpegCommandError,
-    FfmpegProcessUserCancelledError,
+    FfmpegProcessError,
     FfmpegProcessInterruptedError,
+    FfmpegProcessUserCancelledError,
 )
 
 __all__ = [

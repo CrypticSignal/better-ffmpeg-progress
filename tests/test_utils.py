@@ -1,3 +1,5 @@
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -5,13 +7,17 @@ import pytest
 from better_ffmpeg_progress.utils import (
     build_failure_message,
     estimate_final_size_mb,
+    find_ffprobe,
     get_expected_output_duration,
     get_input_format,
+    get_media_duration,
+    get_output_format,
     is_lavfi_input,
     is_local_file_input,
     parse_ffmpeg_time,
     read_progress,
     truncate_filename,
+    writes_to_stdout,
 )
 
 
@@ -71,6 +77,13 @@ def test_read_progress():
         b"out_time_us=5000000\n",
     ]
     assert list(read_progress(lines, 2.0)) == [(0.5, 0.0), (1.5, 1.0), (2.0, 2.0)]
+    # Without a duration, the seconds are not capped. Negative times are clamped to 0.
+    assert list(read_progress([b"out_time_us=-100\n"] + lines, None)) == [
+        (0.0, 0.0),
+        (0.5, 0.0),
+        (1.5, 1.0),
+        (5.0, 2.0),
+    ]
 
 
 def test_truncate_filename():
@@ -116,3 +129,60 @@ def test_build_failure_message(tmp_path: Path):
 
     assert build_failure_message(tmp_path / "missing.txt").endswith("for details.")
     assert build_failure_message(object()).endswith("for details.")
+
+
+@pytest.mark.parametrize(
+    "args, expected_format, expected_stdout",
+    [
+        (["-i", "in.mp4", "out.mp4"], None, False),
+        (["-i", "in.mp4", "-f", "null", "-"], "null", False),
+        (["-f", "mpegts", "-i", "in.ts", "-f", "matroska", "-"], "matroska", True),
+        (["-i", "in.mp4", "-f", "mpegts", "pipe:1"], "mpegts", True),
+        (["-i", "in.mp4", "-f", "mpegts", "pipe:"], "mpegts", True),
+        (["-i", "in.mp4", "-f", "mpegts", "pipe:3"], "mpegts", False),
+        (["-i", "-", "-f", "mpegts", "out.ts"], "mpegts", False),
+    ],
+)
+def test_output_classification(args, expected_format, expected_stdout):
+    command = ["ffmpeg"] + args
+    assert get_output_format(command) == expected_format
+    assert writes_to_stdout(command) == expected_stdout
+
+
+def _make_executable(path: Path, body: str) -> Path:
+    path.write_text("#!/bin/sh\n" + body + "\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Uses shell scripts")
+def test_find_ffprobe_prefers_sibling(tmp_path: Path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    ffmpeg = _make_executable(bin_dir / "ffmpeg", "exit 0")
+    ffprobe = _make_executable(bin_dir / "ffprobe", "exit 0")
+    assert find_ffprobe(str(ffmpeg)) == str(ffprobe)
+
+    # Without a sibling, the ffprobe in PATH is used.
+    ffprobe.unlink()
+    path_dir = tmp_path / "path"
+    path_dir.mkdir()
+    path_ffprobe = _make_executable(path_dir / "ffprobe", "exit 0")
+    monkeypatch.setenv("PATH", str(path_dir))
+    assert find_ffprobe(str(ffmpeg)) == str(path_ffprobe)
+
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    assert find_ffprobe(str(ffmpeg)) is None
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Uses shell scripts")
+def test_get_media_duration(tmp_path: Path, caplog):
+    ffprobe = _make_executable(tmp_path / "ffprobe", "echo 12.5")
+    assert get_media_duration("in.mp4", ffprobe=str(ffprobe)) == 12.5
+
+    slow_ffprobe = _make_executable(tmp_path / "slow_ffprobe", "exec sleep 10")
+    assert get_media_duration("in.mp4", ffprobe=str(slow_ffprobe), timeout=0.2) is None
+    assert "did not finish within 0.2 seconds" in caplog.text
+
+    assert get_media_duration("in.mp4", ffprobe=os.fspath(tmp_path / "missing")) is None
+    assert "FFprobe not found" in caplog.text
