@@ -31,7 +31,7 @@ Changelog = "https://github.com/CrypticSignal/better-ffmpeg-progress/blob/main/C
 
 [project.optional-dependencies]
 tqdm = ["tqdm"]
-test = ["pytest", "tqdm"]
+test = ["pytest", "pytest-timeout", "tqdm"]
 dev = ["better-ffmpeg-progress[test]", "mypy", "ruff", "types-tqdm"]
 
 [tool.setuptools]
@@ -45,6 +45,8 @@ better_ffmpeg_progress = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Fail a test that hangs (e.g. FFmpeg waiting for input) instead of the whole CI job timing out.
+timeout = 120
 
 [tool.mypy]
 files = ["better_ffmpeg_progress"]

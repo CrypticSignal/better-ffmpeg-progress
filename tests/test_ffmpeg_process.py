@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,8 @@ from better_ffmpeg_progress import (
     FfmpegCommandError,
     FfmpegProcess,
     FfmpegProcessError,
+    FfmpegProgress,
+    FfmpegResult,
 )
 
 pytestmark = pytest.mark.skipif(
@@ -335,3 +338,85 @@ def test_non_utf8_stdout(tmp_path: Path, use_tqdm: bool, duration_override):
     )
     assert result.returncode == 0, result.stderr.decode(errors="replace")
     assert b"OK Processed" in result.stdout + result.stderr
+
+
+def test_on_progress_and_result(input_file: Path, tmp_path: Path):
+    reports: list[FfmpegProgress] = []
+    result = FfmpegProcess(
+        ["ffmpeg", "-i", str(input_file), "-c:v", "ffv1", str(tmp_path / "out.mkv")],
+        ffmpeg_log_file=tmp_path / "log.txt",
+        on_progress=reports.append,
+    ).run()
+    assert reports
+    last = reports[-1]
+    assert last.duration_secs == pytest.approx(2, abs=0.2)
+    assert last.frame is not None and last.frame > 0
+    assert last.speed is not None and last.speed > 0
+    assert last.percentage is not None and 0 < last.percentage <= 100
+
+    assert isinstance(result, FfmpegResult)
+    assert result.duration_secs == last.duration_secs
+    assert result.processed_secs == last.secs
+    assert result.output_size_mb == pytest.approx(last.size_mb)
+    assert result.output_size_mb > 0
+    assert result.elapsed_secs > 0
+    assert result.log_file == tmp_path / "log.txt"
+
+
+def test_null_device_output_is_not_prompted(input_file: Path, tmp_path: Path, monkeypatch):
+    def fail(*args):
+        raise AssertionError("Asked whether to overwrite the null device")
+
+    monkeypatch.setattr("builtins.input", fail)
+    command = ["ffmpeg", "-i", str(input_file), "-f", "matroska", os.devnull]
+    result = FfmpegProcess(command, ffmpeg_log_file=tmp_path / "log.txt").run()
+    assert result.output_size_mb > 0
+
+
+def test_concat_input_duration(input_file: Path, tmp_path: Path):
+    list_file = tmp_path / "list.txt"
+    list_file.write_text(f"file '{input_file.name}'\nfile '{input_file.name}'\n", encoding="utf-8")
+    result = FfmpegProcess(
+        ["ffmpeg", "-f", "concat", "-safe", "0", "-i", str(list_file), "-f", "null", "-"],
+        ffmpeg_log_file=tmp_path / "log.txt",
+    ).run()
+    assert result.duration_secs == pytest.approx(4, abs=0.2)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Only supported on Linux")
+def test_ffmpeg_stops_when_python_is_killed(tmp_path: Path):
+    pid_file = tmp_path / "pid.txt"
+    script = f"""
+import os
+from better_ffmpeg_progress import FfmpegProcess
+
+def on_progress(progress):
+    with open({str(pid_file)!r}, "w") as f:
+        f.write(str(process._process.pid))
+
+process = FfmpegProcess(
+    ["ffmpeg", "-re", "-f", "lavfi", "-i", "testsrc2=duration=30", "-f", "null", "-"],
+    ffmpeg_log_file=os.devnull,
+    quiet=True,
+    on_progress=on_progress,
+)
+process.run()
+"""
+    python = subprocess.Popen([sys.executable, "-c", script])
+    try:
+        deadline = time.monotonic() + 20
+        while not pid_file.exists() or not pid_file.read_text():
+            assert time.monotonic() < deadline, "FFmpeg did not start"
+            time.sleep(0.1)
+        ffmpeg_pid = int(pid_file.read_text())
+    finally:
+        python.kill()
+        python.wait()
+
+    deadline = time.monotonic() + 10
+    while Path(f"/proc/{ffmpeg_pid}").exists():
+        status = Path(f"/proc/{ffmpeg_pid}/status").read_text()
+        if "zombie" in status:
+            break
+        assert time.monotonic() < deadline, "FFmpeg kept running after Python was killed"
+        time.sleep(0.1)

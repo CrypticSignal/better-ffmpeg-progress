@@ -1,9 +1,15 @@
+import ctypes
 import os
 import signal
 import subprocess
+import sys
+from collections.abc import Callable
 
 from .exceptions import FfmpegProcessError
 from .utils import logger
+
+# From <linux/prctl.h>.
+_PR_SET_PDEATHSIG = 1
 
 # How long FFmpeg is given to finish writing the output file after being asked to stop.
 _GRACEFUL_TIMEOUT_SECS = 5
@@ -68,3 +74,27 @@ def terminate_ffmpeg_process(process: subprocess.Popen[bytes]) -> None:
         raise FfmpegProcessError(
             f"FFmpeg process (PID: {process.pid}) could not be terminated."
         ) from None
+
+
+def parent_death_signal_setter() -> Callable[[], None] | None:
+    """
+    On Linux, returns a function to run in the FFmpeg process before it starts (Popen's
+    preexec_fn) that makes the kernel send it SIGTERM when this process exits, even if it is
+    killed with SIGKILL. FFmpeg then stops and finishes writing the output file. Otherwise, or if
+    prctl() is not available, returns None.
+    """
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        prctl = ctypes.CDLL(None, use_errno=True).prctl
+    except (OSError, AttributeError):
+        return None
+    parent_pid = os.getpid()
+
+    def set_parent_death_signal() -> None:
+        prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
+        # If this process exited before prctl() was called, the signal would never be sent.
+        if os.getppid() != parent_pid:
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    return set_parent_death_signal
