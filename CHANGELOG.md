@@ -225,3 +225,7 @@
   - Added the `quiet`, `progress_callback` and `delete_log_on_success` parameters.
   - `FfmpegProcessError` now has `returncode` and `log_file` attributes.
   - Added mypy (strict) and more ruff rules to CI.
+
+[Unreleased]
+
+- Fixed `run()` hanging forever when an output file other than the last argument already exists (e.g. `ffmpeg -i in.mkv a.mkv b.mkv` with an existing `a.mkv`). FFmpeg asked whether to overwrite it and waited for an answer on its standard input pipe. `-n` is now added to the command unless it contains `-y` or `-n`, or the file is to be overwritten (in which case `-y` is added, and `overwrite=True` now applies to every output). If FFmpeg refuses to overwrite a file, `FfmpegCommandError` is raised instead of FFmpeg exiting without doing anything.
