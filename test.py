@@ -19,10 +19,9 @@ command = [
     "medium",
     # Encode to a real format but discard the result by writing to the null device
     # (/dev/null, or NUL on Windows). Unlike "-f null", FFmpeg still reports the output size,
-    # which is shown in the progress bar. -y skips the prompt to overwrite the null device.
+    # which is shown in the progress bar.
     "-f",
     "matroska",
-    "-y",
     os.devnull,
 ]
 

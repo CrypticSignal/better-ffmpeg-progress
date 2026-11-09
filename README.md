@@ -49,16 +49,25 @@ try:
     # Pass use_tqdm=True to use tqdm instead of Rich.
     process = FfmpegProcess(command)
 
-    process.run()
+    result = process.run()
+    print(
+        f"Done in {result.elapsed_secs:.1f} seconds. "
+        f"Processed {result.processed_secs:.1f} seconds of media."
+    )
 except FfmpegProcessError as e:
     print(
         "An error occurred when running Better FFmpeg Progress:\n"
         f"{e}"
     )
 ```
+`run()` returns an [`FfmpegResult`](#the-result-of-run) describing the finished run. You do not have to use it: `process.run()` on its own works exactly as it did in earlier versions, so existing code does not need to change. If FFmpeg fails, `run()` raises an exception instead of returning, so a result is only returned when FFmpeg succeeded.
 
-## Trimming
-If your command trims the input with `-ss`, `-sseof`, `-t` or `-to` (as input or output options), the expected duration of the output is calculated automatically, so the progress bar and ETA reflect the trimmed output rather than the whole input file. This adjustment is skipped when `-copyts` is used.
+## Trimming, looping and other options that change the duration
+The expected duration of the output is calculated from the command, so the progress bar and ETA reflect the output rather than the whole input file. These options are taken into account:
+* `-ss`, `-sseof`, `-t` and `-to`, as input or output options. They are ignored when `-copyts` is used.
+* `-stream_loop` and `-loop 1` (to repeat an image). An input that is looped indefinitely has an unknown duration, unless it is trimmed with e.g. `-t`.
+* `-shortest`: the output ends with the shortest input, e.g. `ffmpeg -loop 1 -i cover.jpg -i song.mp3 -shortest video.mp4` takes the duration of `song.mp3`.
+* `-frames:v` (or `-vframes`), using the output's `-r` or else the frame rate of the first input.
 
 ## Duration Override
 By default, Better FFmpeg Progress detects the duration of the input file and uses it to calculate percentage progress and ETA.
@@ -85,7 +94,8 @@ process = FfmpegProcess(
     print_detected_duration=True,
 )
 
-process.run()
+result = process.run()
+print(f"Recovered {result.output_size_mb:.1f} MB")
 ```
 
 ## Generated (lavfi) Inputs
@@ -106,7 +116,8 @@ command = [
 ]
 
 process = FfmpegProcess(command, duration_override=30)
-process.run()
+result = process.run()
+print(f"Encoded {result.processed_secs:.0f} seconds in {result.elapsed_secs:.1f} seconds")
 ```
 
 By default, the FFmpeg log file is named after the source, e.g. `lavfi_testsrc2_ffmpeg_log.txt`.
@@ -118,15 +129,30 @@ An instance of `FfmpegProcess` accepts the following optional arguments:
 * `print_detected_duration` — Print the detected duration. Default: `False`.
 * `duration_override` — Specify input file duration in seconds to use for progress calculation, instead of trying to detect this automatically with FFprobe. Default: `None`.
 * `use_tqdm` — Use tqdm instead of Rich for the progress bar. Default: `False`.
-* `overwrite` — What to do if the output file already exists: `True` overwrites it, `False` raises `FfmpegCommandError`, and `None` asks whether to overwrite it. Ignored if the command contains `-y` or `-n`. Default: `None`.
+* `overwrite` — What to do if the output file already exists: `True` overwrites it (and any other existing output), `False` raises `FfmpegCommandError`, and `None` asks whether to overwrite it. Ignored if the command contains `-y` or `-n`. Writing to the null device (e.g. `/dev/null`) never asks. Default: `None`.
 * `quiet` — Do not show a progress bar or status messages. Default: `False`.
 * `progress_callback` — A function to call each time FFmpeg reports its progress. See [Progress callback](#progress-callback). Default: `None`.
 * `delete_log_on_success` — Delete the FFmpeg log file if FFmpeg succeeds. Default: `False`.
+* `on_progress` — Like `progress_callback`, but called with an `FfmpegProgress` that also has the speed, frames per second and more. See [Progress callback](#progress-callback). Default: `None`.
 
 Creating an `FfmpegProcess` only validates the command. FFprobe is run, and you are asked whether to overwrite an existing output file, when `run()` is called.
 
 The `run` method accepts the following optional argument:
 * `print_command` — Print the FFmpeg command being executed. Default: `False`.
+
+### The result of `run()`
+If FFmpeg succeeds, `run()` returns an `FfmpegResult`. Capturing it is optional, so `process.run()` without assigning the result is fine. If FFmpeg fails, an exception is raised instead (see [Errors](#errors)). The result has these attributes:
+* `elapsed_secs` — How long FFmpeg ran for, in seconds.
+* `processed_secs` — Seconds of the output processed, as last reported by FFmpeg.
+* `duration_secs` — The expected output duration used for the progress bar, or `None` if it was unknown.
+* `output_size_mb` — The size of the output in MB, as last reported by FFmpeg.
+* `log_file` — The path or file object that FFmpeg's log was written to.
+
+```python
+result = FfmpegProcess(command).run()
+print(f"Took {result.elapsed_secs:.1f} seconds, output is {result.output_size_mb:.1f} MB")
+print(f"Speed: {result.processed_secs / result.elapsed_secs:.1f}x real time")
+```
 
 ## Using tqdm
 By default, the [Rich](https://github.com/Textualize/rich) library is used to display a progress bar. [tqdm](https://github.com/tqdm/tqdm) can be used instead by passing `use_tqdm=True`. tqdm is an optional dependency, installed with:
@@ -135,7 +161,8 @@ pip install "better-ffmpeg-progress[tqdm]" --upgrade
 ```
 ```python
 process = FfmpegProcess(command, use_tqdm=True)
-process.run()
+result = process.run()
+print(f"Finished in {result.elapsed_secs:.1f} seconds")
 ```
 
 ## Progress callback
@@ -149,12 +176,25 @@ FfmpegProcess(command, quiet=True, progress_callback=on_progress).run()
 ```
 If the callback raises an exception, FFmpeg is stopped and the exception is propagated by `run()`.
 
+For more detail, pass a function as `on_progress` instead. It is called with an `FfmpegProgress`, which has these attributes: `secs`, `duration_secs`, `size_mb`, `percentage` (`None` if the duration is unknown), `speed` (e.g. `2.5` for 2.5x real time), `fps`, `frame` and `bitrate_kbps`. Values that FFmpeg has not reported (yet) are `None`.
+```python
+from better_ffmpeg_progress import FfmpegProcess, FfmpegProgress
+
+def on_progress(progress: FfmpegProgress) -> None:
+    if progress.percentage is not None:
+        print(f"{progress.percentage:.0f}% at {progress.speed}x")
+
+FfmpegProcess(command, quiet=True, on_progress=on_progress).run()
+```
+
 ## Errors
 All exceptions raised by the package are subclasses of `FfmpegProcessError`, which has these attributes:
 * `returncode` — FFmpeg's exit code, or `None` if FFmpeg was not started or had not exited.
 * `log_file` — The path or file object that FFmpeg's log was written to.
 
 Pressing Ctrl+C raises `FfmpegProcessInterruptedError`. FFmpeg is first asked to stop the way pressing `q` does, so it can finish writing the output file, e.g. an MP4 file stays playable. If it does not stop within 5 seconds, it is terminated.
+
+FFmpeg runs in its own process group, so it is not stopped by signals sent to your program's group. On Linux, it is sent `SIGTERM` if your program exits without stopping it, e.g. if it is killed with `SIGKILL`. On macOS and Windows, FFmpeg keeps running in that case.
 
 ## Logging
 Warnings, such as when the input duration cannot be detected, are logged with the `logging` module using the `better_ffmpeg_progress` logger. Without any logging configuration, Python prints them to standard error. To hide them:
@@ -169,9 +209,13 @@ On Linux and macOS, the output can be written to standard output, e.g. `-f mpegt
 
 ## Duration detection
 FFprobe is looked for next to the FFmpeg executable first (e.g. `/opt/ffmpeg/bin/ffprobe` for `/opt/ffmpeg/bin/ffmpeg`), then in `PATH`. If it does not finish within 30 seconds, e.g. for an unresponsive URL, the duration is treated as unknown.
+
+Input options that change how the input is read (`-f`, `-framerate`, `-pattern_type`, `-start_number`, `-safe` and `-protocol_whitelist`) are passed to FFprobe, so e.g. the duration of an image sequence with `-framerate` is correct.
+
+For the [concat demuxer](https://ffmpeg.org/ffmpeg-formats.html#concat-1) (`-f concat -i list.txt`), FFprobe cannot detect the total duration, so the list file is read and the durations of its files are added up, taking `inpoint`, `outpoint` and `duration` into account.
 ## Limitations
-- Progress is calculated from the duration of the first input (the first `-i`).
-- The last argument of the command is treated as the output file, e.g. when checking whether it already exists. With multiple outputs, only the last one is checked.
+- Progress is calculated from the duration of the first input (the first `-i`), or the shortest input with `-shortest`.
+- The last argument of the command is treated as the output file, e.g. when checking whether it already exists. With multiple outputs, only the last one is checked before FFmpeg runs. If another output already exists, FFmpeg does not run and `FfmpegCommandError` is raised, unless `overwrite=True` or `-y` is used.
 
 ## Development
 Install the package in editable mode with the development dependencies, then run the tests (FFmpeg and FFprobe must be installed):

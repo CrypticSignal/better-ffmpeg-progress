@@ -1,13 +1,18 @@
+import json
 import logging
+import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from collections import deque
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from .exceptions import FfmpegCommandError
+from .models import FfmpegProgress
 
 _FFMPEG_INPUT_FLAG = "-i"
 _BYTES_PER_MB = 1024 * 1024
@@ -23,6 +28,40 @@ logger = logging.getLogger("better_ffmpeg_progress")
 _PROTOCOL_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]+:")
 # A printf-style pattern used for image sequences, e.g. "img%03d.png".
 _SEQUENCE_PATTERN_RE = re.compile(r"%0?\d*d")
+
+
+def get_inputs(command: list[str]) -> list[tuple[list[str], str]]:
+    """
+    Returns (input options, input) for each "-i" in the command. The input options of an input
+    are the arguments between the previous input (or the executable) and its "-i".
+    """
+    inputs: list[tuple[list[str], str]] = []
+    options_start = 1
+    i = 1
+    while i < len(command) - 1:
+        if command[i] == _FFMPEG_INPUT_FLAG:
+            inputs.append((command[options_start:i], command[i + 1]))
+            options_start = i + 2
+            i += 2
+        else:
+            i += 1
+    return inputs
+
+
+def get_option_value(args: Sequence[str], option: str) -> str | None:
+    """Returns the value of the last occurrence of option in args, or None if it is not given."""
+    value = None
+    for i, arg in enumerate(args[:-1]):
+        if arg == option:
+            value = args[i + 1]
+    return value
+
+
+def is_null_device(output: str) -> bool:
+    """Returns True if output is the null device, e.g. /dev/null, or NUL on Windows."""
+    if os.name == "nt" and output.upper() == "NUL":
+        return True
+    return os.path.normcase(output) == os.path.normcase(os.devnull)
 
 
 def get_input_format(command: list[str], input_flag_pos: int) -> str | None:
@@ -164,30 +203,97 @@ def find_ffprobe(ffmpeg_executable: str) -> str | None:
     return shutil.which("ffprobe")
 
 
-def get_media_duration(
-    input_file: str,
-    ffprobe: str | None = "ffprobe",
-    timeout: float | None = FFPROBE_TIMEOUT_SECS,
-) -> float | None:
-    """
-    Retrieves the duration of a media file or URL using FFprobe.
-    Returns duration in seconds, or None if it cannot be determined (including when FFprobe takes
-    longer than timeout seconds, e.g. for an unresponsive URL).
-    """
-    ffprobe_path = shutil.which(ffprobe) if ffprobe else None
-    if not ffprobe_path:
-        logger.warning("FFprobe not found. Cannot determine media duration.")
+# Input options that are passed to FFprobe, so that it reads the input the way FFmpeg does, e.g.
+# "-framerate" changes the duration of an image sequence.
+_PROBE_OPTIONS = (
+    "-f",
+    "-framerate",
+    "-pattern_type",
+    "-start_number",
+    "-safe",
+    "-protocol_whitelist",
+)
+
+
+# Input formats with no duration, such as capture devices. FFprobe is not run for these, because
+# it would open the device (e.g. a camera), which can be slow or ask for permission.
+_LIVE_INPUT_FORMATS = frozenset(
+    {
+        "alsa",
+        "android_camera",
+        "avfoundation",
+        "decklink",
+        "dshow",
+        "fbdev",
+        "gdigrab",
+        "iec61883",
+        "jack",
+        "kmsgrab",
+        "lavfi",
+        "openal",
+        "oss",
+        "pulse",
+        "sndio",
+        "v4l2",
+        "vfwcap",
+        "video4linux2",
+        "x11grab",
+    }
+)
+
+
+@dataclass(frozen=True)
+class MediaInfo:
+    """What FFprobe detected about an input. Each value is None if it could not be detected."""
+
+    duration: float | None = None
+    # The frame rate of the first video stream.
+    frame_rate: float | None = None
+
+
+def _probe_args(input_options: Sequence[str]) -> list[str]:
+    args = []
+    for option in _PROBE_OPTIONS:
+        value = get_option_value(input_options, option)
+        if value is not None:
+            args += [option, value]
+    return args
+
+
+def parse_frame_rate(value: object) -> float | None:
+    """Parses a frame rate such as "30", "29.97" or "30000/1001". Returns None if it is invalid."""
+    if not isinstance(value, str):
         return None
+    numerator, _, denominator = value.partition("/")
+    try:
+        rate = float(numerator) / float(denominator or 1)
+    except (ValueError, ZeroDivisionError):
+        return None
+    return rate if math.isfinite(rate) and rate > 0 else None
+
+
+def _parse_duration(value: object) -> float | None:
+    try:
+        duration = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return duration if math.isfinite(duration) and duration >= 0 else None
+
+
+def _run_ffprobe(
+    ffprobe_path: str, input_file: str, input_options: Sequence[str], timeout: float | None
+) -> MediaInfo:
     try:
         output = subprocess.check_output(
             [
                 ffprobe_path,
                 "-v",
                 "error",
+                *_probe_args(input_options),
                 "-show_entries",
-                "format=duration",
+                "format=duration:stream=codec_type,avg_frame_rate",
                 "-of",
-                "default=noprint_wrappers=1:nokey=1",
+                "json",
                 "-i",
                 input_file,
             ],
@@ -196,44 +302,189 @@ def get_media_duration(
             stderr=subprocess.DEVNULL,
             timeout=timeout,
         )
-        return float(output)
+        data = json.loads(output)
     except subprocess.TimeoutExpired:
         logger.warning(
             "Could not determine the duration of '%s': FFprobe did not finish within %s seconds.",
             input_file,
             timeout,
         )
+        return MediaInfo()
     except (subprocess.CalledProcessError, ValueError, OSError):
-        logger.warning("Could not determine the duration of '%s'.", input_file)
-    return None
+        return MediaInfo()
+    if not isinstance(data, dict):
+        return MediaInfo()
+
+    format_info = data.get("format")
+    duration = (
+        _parse_duration(format_info.get("duration")) if isinstance(format_info, dict) else None
+    )
+    frame_rate = None
+    streams = data.get("streams")
+    for stream in streams if isinstance(streams, list) else []:
+        if isinstance(stream, dict) and stream.get("codec_type") == "video":
+            frame_rate = parse_frame_rate(stream.get("avg_frame_rate"))
+            break
+    return MediaInfo(duration, frame_rate)
 
 
-def read_progress(
-    lines: Iterable[bytes], duration_secs: float | None
-) -> Iterator[tuple[float, float]]:
+@dataclass
+class _ConcatEntry:
+    path: str
+    inpoint: float | None = None
+    outpoint: float | None = None
+    duration: float | None = None
+
+
+def _read_concat_list(list_file: str) -> list[_ConcatEntry] | None:
     """
-    Reads FFmpeg's "-progress" output, which consists of "key=value" lines such as
-    b"total_size=12345678" and b"out_time_us=12345678".
-    Yields (seconds processed, output size in MB) each time FFmpeg reports its progress.
+    Reads the entries of a concat demuxer list file, e.g. "file 'part1.mp4'" lines. Relative
+    paths are relative to the list file. Returns None if the file cannot be read or parsed.
+    """
+    try:
+        text = Path(list_file).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    entries: list[_ConcatEntry] = []
+    for line in text.splitlines():
+        try:
+            # The list file quotes and escapes like a POSIX shell, and "#" starts a comment.
+            tokens = shlex.split(line, comments=True)
+        except ValueError:
+            return None
+        if len(tokens) < 2:
+            continue
+        directive, value = tokens[0], tokens[1]
+        if directive == "file":
+            if not is_protocol_input(value) and not os.path.isabs(value):
+                value = os.path.join(os.path.dirname(list_file), value)
+            entries.append(_ConcatEntry(value))
+        elif entries and directive in ("inpoint", "outpoint", "duration"):
+            time = parse_ffmpeg_time(value)
+            if time is None:
+                return None
+            setattr(entries[-1], directive, time)
+    return entries or None
+
+
+def _get_concat_duration(list_file: str, ffprobe_path: str, timeout: float | None) -> float | None:
+    """
+    Returns the total duration of the files in a concat demuxer list file, taking the inpoint,
+    outpoint and duration directives into account, or None if it cannot be determined.
+    FFprobe cannot detect it, because the concat demuxer does not know the total duration.
+    """
+    if is_protocol_input(list_file):
+        return None
+    entries = _read_concat_list(list_file)
+    if entries is None:
+        return None
+
+    total = 0.0
+    for entry in entries:
+        if entry.duration is not None and entry.outpoint is None:
+            total += entry.duration
+            continue
+        end = entry.outpoint
+        if end is None:
+            end = _run_ffprobe(ffprobe_path, entry.path, [], timeout).duration
+            if end is None:
+                return None
+        total += max(end - (entry.inpoint or 0.0), 0.0)
+    return total
+
+
+def probe_media(
+    input_file: str,
+    input_options: Sequence[str] = (),
+    ffprobe: str | None = "ffprobe",
+    timeout: float | None = FFPROBE_TIMEOUT_SECS,
+) -> MediaInfo:
+    """
+    Detects the duration and frame rate of a media file or URL with FFprobe. input_options are
+    the FFmpeg options given for the input (e.g. ["-f", "concat", "-safe", "0"]); the ones that
+    affect how the input is read are passed to FFprobe. Values that cannot be determined
+    (including when FFprobe takes longer than timeout seconds) are None.
+    """
+    ffprobe_path = shutil.which(ffprobe) if ffprobe else None
+    if not ffprobe_path:
+        logger.warning("FFprobe not found. Cannot determine media duration.")
+        return MediaInfo()
+
+    input_format = get_option_value(input_options, "-f")
+    if input_format in _LIVE_INPUT_FORMATS:
+        logger.warning("Could not determine the duration of '%s'.", input_file)
+        return MediaInfo()
+
+    info = _run_ffprobe(ffprobe_path, input_file, input_options, timeout)
+    if info.duration is None and input_format == "concat":
+        duration = _get_concat_duration(input_file, ffprobe_path, timeout)
+        info = MediaInfo(duration, info.frame_rate)
+    if info.duration is None:
+        logger.warning("Could not determine the duration of '%s'.", input_file)
+    return info
+
+
+def get_media_duration(
+    input_file: str,
+    ffprobe: str | None = "ffprobe",
+    timeout: float | None = FFPROBE_TIMEOUT_SECS,
+    input_options: Sequence[str] = (),
+) -> float | None:
+    """
+    Retrieves the duration of a media file or URL using FFprobe.
+    Returns duration in seconds, or None if it cannot be determined (including when FFprobe takes
+    longer than timeout seconds, e.g. for an unresponsive URL).
+    """
+    return probe_media(input_file, input_options, ffprobe, timeout).duration
+
+
+def _parse_number(value: bytes) -> float | None:
+    try:
+        number = float(value)
+    except ValueError:  # e.g. "N/A"
+        return None
+    return number if math.isfinite(number) else None
+
+
+def read_progress(lines: Iterable[bytes], duration_secs: float | None) -> Iterator[FfmpegProgress]:
+    """
+    Reads FFmpeg's "-progress" output, which consists of blocks of "key=value" lines such as
+    b"total_size=12345678" and b"out_time_us=12345678", each ending with a "progress=" line.
+    Yields an FfmpegProgress at the end of each block.
     The seconds processed are never negative, and are capped at duration_secs if it is not None.
     """
+    secs = 0.0
     size_mb = 0.0
+    fields: dict[bytes, float] = {}
     for line in lines:
         key, _, value = line.strip().partition(b"=")
-        try:
-            number = int(value)
-        except ValueError:  # e.g. "N/A"
+        if key == b"progress":
+            frame = fields.get(b"frame")
+            yield FfmpegProgress(
+                secs=secs,
+                duration_secs=duration_secs,
+                size_mb=size_mb,
+                speed=fields.get(b"speed"),
+                fps=fields.get(b"fps"),
+                frame=int(frame) if frame is not None else None,
+                bitrate_kbps=fields.get(b"bitrate"),
+            )
+            fields = {}
             continue
 
-        # FFmpeg writes total_size before out_time_us in each block of progress output,
-        # so each yielded value includes the latest size.
+        # e.g. b"1.5x" for speed and b"1234.5kbits/s" for bitrate.
+        number = _parse_number(value.removesuffix(b"x").removesuffix(b"kbits/s"))
+        if number is None:
+            continue
         if key == b"total_size":
             size_mb = number / _BYTES_PER_MB
         elif key == b"out_time_us":
             secs = max(number / 1_000_000, 0.0)
             if duration_secs is not None:
                 secs = min(secs, duration_secs)
-            yield secs, size_mb
+        else:
+            fields[key] = number
 
 
 # Matches FFmpeg's time duration syntax: [-][HH:]MM:SS[.m...] or [-]S+[.m...][s|ms|us]
@@ -279,6 +530,7 @@ def _apply_trim(duration: float, options: dict[str, float]) -> float:
     """
     Applies -ss/-sseof/-t/-to to a duration, mirroring FFmpeg's logic:
     -t takes priority over -to, and -to is relative to -ss (recording_time = to - ss).
+    The duration can be math.inf, e.g. for an input that is looped indefinitely.
     """
     start = options.get("-ss", 0.0)
 
@@ -296,30 +548,85 @@ def _apply_trim(duration: float, options: dict[str, float]) -> float:
     return max(remaining, 0.0)
 
 
-def get_expected_output_duration(command: list[str], input_duration: float) -> float:
+def _get_input_duration(options: list[str], duration: float, trim: bool) -> float:
     """
-    Estimates the duration of the output by taking the trim options of the command into account.
+    Applies the input options of an input that change its duration: -stream_loop, -loop (e.g.
+    "-loop 1" to repeat an image) and, if trim is True, the trim options. Returns math.inf if
+    the input is looped indefinitely and not trimmed.
+    """
+    stream_loop = get_option_value(options, "-stream_loop")
+    if stream_loop is not None:
+        try:
+            loops = int(stream_loop)
+        except ValueError:
+            loops = 0
+        duration = math.inf if loops < 0 else duration * (loops + 1)
+    if get_option_value(options, "-loop") not in (None, "0"):
+        duration = math.inf
+    return _apply_trim(duration, _collect_trim_options(options)) if trim else duration
+
+
+def _get_video_frame_limit(output_options: list[str]) -> int | None:
+    value = get_option_value(output_options, "-frames:v") or get_option_value(
+        output_options, "-vframes"
+    )
+    try:
+        return int(value) if value is not None else None
+    except ValueError:
+        return None
+
+
+def get_expected_output_duration(
+    command: list[str],
+    input_duration: float | None,
+    other_input_durations: Sequence[float | None] = (),
+    frame_rate: float | None = None,
+) -> float | None:
+    """
+    Estimates the duration of the output from the duration of the first input (and, with
+    -shortest, the durations of the other inputs, in order). Returns None if it is unknown or
+    infinite (e.g. "-stream_loop -1" without -t).
 
     Options before the first "-i" are input options for the first input, and options between the
-    last input path and the output path are output options. Input trimming is applied first
-    (seeking with an input -ss resets timestamps to 0), then output trimming.
+    last input path and the output path are output options. Input options are applied first
+    (seeking with an input -ss resets timestamps to 0), then output options. The output's
+    -frames:v (or -vframes) limits the duration using the output's -r or else frame_rate, the
+    frame rate of the first input.
 
-    If -copyts is used, timestamps are not reset, so no adjustment is made.
+    If -copyts is used, timestamps are not reset, so trim options are not applied.
     """
-    if "-copyts" in command:
-        return input_duration
-
-    first_input_idx = command.index(_FFMPEG_INPUT_FLAG)
+    trim = "-copyts" not in command
+    inputs = get_inputs(command)
     last_input_idx = len(command) - 1 - command[::-1].index(_FFMPEG_INPUT_FLAG)
+    output_options = command[last_input_idx + 2 : -1]
 
-    input_options = _collect_trim_options(command[1:first_input_idx])
-    output_options = _collect_trim_options(command[last_input_idx + 2 : -1])
+    durations = [
+        _get_input_duration(options, duration, trim)
+        for (options, _), duration in zip(
+            inputs, [input_duration, *other_input_durations], strict=False
+        )
+        if duration is not None
+    ]
+    if input_duration is None and "-shortest" not in command:
+        return None
+    if not durations:
+        return None
 
-    duration = _apply_trim(input_duration, input_options)
-    duration = _apply_trim(duration, output_options)
+    duration = min(durations) if "-shortest" in command else durations[0]
+    if trim:
+        duration = _apply_trim(duration, _collect_trim_options(output_options))
 
+    frame_limit = _get_video_frame_limit(output_options)
+    output_rate = parse_frame_rate(get_option_value(output_options, "-r")) or frame_rate
+    if frame_limit is not None and output_rate:
+        duration = min(duration, frame_limit / output_rate)
+
+    if not math.isfinite(duration):
+        return None
+    if duration > 0:
+        return duration
     # Never return 0, which would disable the progress bar.
-    return duration if duration > 0 else input_duration
+    return input_duration if input_duration else None
 
 
 def truncate_filename(filename: str, max_length: int = 60) -> str:

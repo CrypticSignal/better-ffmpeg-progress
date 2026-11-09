@@ -7,6 +7,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import IO, Any, TextIO
@@ -18,16 +19,19 @@ from .exceptions import (
     FfmpegProcessInterruptedError,
     FfmpegProcessUserCancelledError,
 )
+from .models import FfmpegProgress, FfmpegResult
 from .progress_bars import make_display
-from .terminate_process import terminate_ffmpeg_process
+from .terminate_process import parent_death_signal_setter, terminate_ffmpeg_process
 from .utils import (
     build_failure_message,
     find_ffprobe,
     get_expected_output_duration,
-    get_media_duration,
+    get_inputs,
     is_lavfi_input,
     is_local_file_input,
+    is_null_device,
     is_stdin_input,
+    probe_media,
     read_progress,
     truncate_filename,
     validate_ffmpeg_command,
@@ -37,6 +41,7 @@ from .utils import (
 _MAX_FILENAME_LENGTH = 60
 
 ProgressCallback = Callable[[float, "float | None", float], None]
+ProgressHandler = Callable[[FfmpegProgress], None]
 
 
 def _safe_filename(name: str) -> str:
@@ -108,6 +113,7 @@ class FfmpegProcess:
         quiet: bool = False,
         progress_callback: ProgressCallback | None = None,
         delete_log_on_success: bool = False,
+        on_progress: ProgressHandler | None = None,
     ):
         """
         Create an FFmpeg process with progress reporting. Nothing is run until run() is called.
@@ -144,6 +150,9 @@ class FfmpegProcess:
             delete_log_on_success:
                 Delete the log file if FFmpeg succeeds. Only applies when the log is written to
                 a regular file given by path (or the default log file).
+            on_progress:
+                Like progress_callback, but called with an FfmpegProgress, which also has the
+                processing speed, frames per second, frame number, bitrate and percentage.
         """
         validate_ffmpeg_command(command)
         self._log_level = _parse_log_level(ffmpeg_log_level)
@@ -151,6 +160,8 @@ class FfmpegProcess:
             raise TypeError("overwrite must be True, False or None")
         if progress_callback is not None and not callable(progress_callback):
             raise TypeError("progress_callback must be callable or None")
+        if on_progress is not None and not callable(on_progress):
+            raise TypeError("on_progress must be callable or None")
         if use_tqdm:
             try:
                 import tqdm  # noqa: F401
@@ -188,6 +199,7 @@ class FfmpegProcess:
         self._overwrite = overwrite
         self._quiet = quiet
         self._progress_callback = progress_callback
+        self._on_progress = on_progress
         self._delete_log_on_success = delete_log_on_success
         self._duration_secs: float | None = None
         self._process: subprocess.Popen[bytes] | None = None
@@ -203,45 +215,54 @@ class FfmpegProcess:
 
     def _get_output_duration(self) -> float | None:
         """Returns the expected duration of the output in seconds, or None if it is unknown."""
+        inputs = get_inputs(self._command)
+        first_options, first_input = inputs[0]
+        ffprobe = find_ffprobe(self._command[0])
+        frame_rate: float | None = None
         if self._duration_override is not None:
             input_duration_secs: float | None = self._duration_override
-        elif is_stdin_input(self._input_file):
+        elif is_stdin_input(first_input):
             # Running FFprobe on standard input would consume data that is meant for FFmpeg.
             input_duration_secs = None
         else:
-            input_duration_secs = get_media_duration(
-                self._input_file, ffprobe=find_ffprobe(self._command[0])
-            )
+            info = probe_media(first_input, first_options, ffprobe=ffprobe)
+            input_duration_secs, frame_rate = info.duration, info.frame_rate
 
-        # Account for trimming (-ss, -sseof, -t, -to) so the progress bar reflects the
-        # duration of the output rather than the whole input.
-        duration_secs = (
-            get_expected_output_duration(self._command, input_duration_secs)
-            if input_duration_secs is not None
-            else None
+        # With -shortest, the output ends with the shortest input.
+        other_durations: list[float | None] = []
+        if "-shortest" in self._command:
+            other_durations = [
+                None
+                if is_stdin_input(path)
+                else probe_media(path, options, ffprobe=ffprobe).duration
+                for options, path in inputs[1:]
+            ]
+
+        # Account for options such as -ss, -t, -stream_loop, -shortest and -frames:v, so the
+        # progress bar reflects the duration of the output rather than the whole input.
+        duration_secs = get_expected_output_duration(
+            self._command, input_duration_secs, other_durations, frame_rate
         )
 
         if self._print_detected_duration or (
             self._duration_override is not None and not self._quiet
         ):
             stream = self._message_stream
-            if input_duration_secs is None:
-                print(
-                    "Could not detect duration. Progress bar may not show time remaining.",
-                    file=stream,
-                )
-            else:
+            if input_duration_secs is not None:
                 label = (
                     "Using duration override"
                     if self._duration_override is not None
                     else "Detected duration"
                 )
                 print(f"{label}: {input_duration_secs:.2f} seconds", file=stream)
-                if duration_secs != input_duration_secs:
-                    print(
-                        f"Expected output duration after trimming: {duration_secs:.2f} seconds",
-                        file=stream,
-                    )
+            if duration_secs is None:
+                print(
+                    "Could not detect the output duration. Progress bar may not show time "
+                    "remaining.",
+                    file=stream,
+                )
+            elif duration_secs != input_duration_secs:
+                print(f"Expected output duration: {duration_secs:.2f} seconds", file=stream)
 
         return duration_secs
 
@@ -263,6 +284,9 @@ class FfmpegProcess:
                 )
             return []
         if self._overwrite is True:
+            return ["-y"]
+        if is_null_device(str(self._output_filepath)) and self._overwrite is None:
+            # Writing to the null device (e.g. /dev/null) does not overwrite anything.
             return ["-y"]
         if not self._last_output_exists():
             # Any other output that already exists makes FFmpeg fail instead of asking.
@@ -316,9 +340,12 @@ class FfmpegProcess:
             *self._command[1:],
         ]
 
-    def run(self, print_command: bool = False) -> None:
+    def run(self, print_command: bool = False) -> FfmpegResult:
         """
         Runs FFmpeg and shows its progress until it exits.
+
+        Returns:
+            An FfmpegResult with how long FFmpeg ran for and the size of the output.
 
         Raises:
             FfmpegProcessError: If FFmpeg fails, or cannot be started. Its returncode and
@@ -353,6 +380,11 @@ class FfmpegProcess:
             # Run FFmpeg in its own session, so that pressing Ctrl+C does not send the signal to
             # FFmpeg directly, and terminating its process group does not terminate Python.
             popen_kwargs = {"pass_fds": (write_fd,), "start_new_session": True}
+            # On Linux, stop FFmpeg if this program is killed, e.g. with SIGKILL, so it does not
+            # keep running on its own.
+            set_parent_death_signal = parent_death_signal_setter()
+            if set_parent_death_signal is not None:
+                popen_kwargs["preexec_fn"] = set_parent_death_signal
 
         # FFmpeg reads commands such as "q" from standard input. Unless standard input carries
         # FFmpeg's input, give it a pipe instead, so it does not consume data meant for this
@@ -364,6 +396,7 @@ class FfmpegProcess:
         if print_command:
             print(f"Executing: {shlex.join(ffmpeg_command)}", file=self._message_stream)
 
+        start_time = time.monotonic()
         try:
             # FFmpeg keeps its own handle to the log file, so it can be closed here.
             with log_file as stderr:
@@ -398,21 +431,26 @@ class FfmpegProcess:
             # The progress output must always be read, even if it is not displayed: once the
             # pipe's buffer is full, FFmpeg blocks and never exits.
             with progress_stream, display:
-                size_mb = 0.0
+                progress = FfmpegProgress(0.0, self._duration_secs, 0.0)
                 reported_progress = False
-                for secs, size_mb in read_progress(progress_stream, self._duration_secs):
+                for progress in read_progress(progress_stream, self._duration_secs):
                     reported_progress = True
-                    display.update(secs, size_mb)
+                    display.update(progress.secs, progress.size_mb)
                     if self._progress_callback is not None:
-                        self._progress_callback(secs, self._duration_secs, size_mb)
+                        self._progress_callback(
+                            progress.secs, self._duration_secs, progress.size_mb
+                        )
+                    if self._on_progress is not None:
+                        self._on_progress(progress)
                 returncode = process.wait()
+                elapsed_secs = time.monotonic() - start_time
                 # With -n, FFmpeg exits with code 0 without processing anything if an output
                 # file already exists. When FFmpeg does run, it always reports its progress.
                 refused_to_overwrite = (
                     returncode == 0 and not reported_progress and "-n" in ffmpeg_command
                 )
                 if returncode == 0 and not refused_to_overwrite:
-                    display.complete(size_mb)
+                    display.complete(progress.size_mb)
         except KeyboardInterrupt as e:
             terminate_ffmpeg_process(process)
             raise FfmpegProcessInterruptedError(
@@ -453,3 +491,11 @@ class FfmpegProcess:
         ):
             with contextlib.suppress(OSError):
                 self._ffmpeg_log_file.unlink()
+
+        return FfmpegResult(
+            elapsed_secs=elapsed_secs,
+            processed_secs=progress.secs,
+            duration_secs=self._duration_secs,
+            output_size_mb=progress.size_mb,
+            log_file=self._ffmpeg_log_file,
+        )

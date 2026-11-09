@@ -226,6 +226,16 @@
   - `FfmpegProcessError` now has `returncode` and `log_file` attributes.
   - Added mypy (strict) and more ruff rules to CI.
 
-[Unreleased]
+[09/11/2026]
 
-- Fixed `run()` hanging forever when an output file other than the last argument already exists (e.g. `ffmpeg -i in.mkv a.mkv b.mkv` with an existing `a.mkv`). FFmpeg asked whether to overwrite it and waited for an answer on its standard input pipe. `-n` is now added to the command unless it contains `-y` or `-n`, or the file is to be overwritten (in which case `-y` is added, and `overwrite=True` now applies to every output). If FFmpeg refuses to overwrite a file, `FfmpegCommandError` is raised instead of FFmpeg exiting without doing anything.
+- [v7.1.0]
+  - Fixed `run()` hanging forever when an output file other than the last argument already exists (e.g. `ffmpeg -i in.mkv a.mkv b.mkv` with an existing `a.mkv`). FFmpeg asked whether to overwrite it and waited for an answer on its standard input pipe. `-n` is now added to the command unless it contains `-y` or `-n`, or the file is to be overwritten (in which case `-y` is added, and `overwrite=True` now applies to every output). If FFmpeg refuses to overwrite a file, `FfmpegCommandError` is raised instead of FFmpeg exiting without doing anything.
+  - Better duration detection, so more commands get a percentage and ETA:
+    - The concat demuxer (`-f concat -i list.txt`) is supported: the durations of the files in the list are added up.
+    - Input options such as `-f` and `-framerate` are passed to FFprobe, e.g. for image sequences.
+    - `-stream_loop`, `-loop 1`, `-shortest` and `-frames:v`/`-vframes` are taken into account.
+  - Added the `on_progress` parameter, called with an `FfmpegProgress` that also has the speed, frames per second, frame number, bitrate and percentage.
+  - `run()` now returns an `FfmpegResult` with how long FFmpeg ran for and the size of the output.
+  - On Linux, FFmpeg is now stopped if the Python program is killed (e.g. with `SIGKILL`), instead of running on its own.
+  - Writing to the null device (e.g. `/dev/null`) no longer asks whether to overwrite it.
+  - Tests time out after 120 seconds with `pytest-timeout`, so a hang fails quickly in CI.
