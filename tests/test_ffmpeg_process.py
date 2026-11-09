@@ -137,6 +137,23 @@ def test_overwrite(input_file: Path, tmp_path: Path):
     ).run()
 
 
+def test_existing_output_other_than_last_does_not_hang(input_file: Path, tmp_path: Path):
+    # FFmpeg would ask whether to overwrite first.mkv and wait forever for an answer.
+    first = tmp_path / "first.mkv"
+    first.touch()
+    second = tmp_path / "second.mkv"
+    command = ["ffmpeg", "-i", str(input_file), "-c", "copy", str(first)]
+    command += ["-c", "copy", str(second)]
+    log_file = tmp_path / "log.txt"
+
+    with pytest.raises(FfmpegCommandError, match="already exists"):
+        FfmpegProcess(command, ffmpeg_log_file=log_file).run()
+    assert first.stat().st_size == 0
+
+    FfmpegProcess(command, overwrite=True, ffmpeg_log_file=log_file).run()
+    assert first.stat().st_size > 0
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="Uses POSIX signals")
 def test_keyboard_interrupt_raises_and_does_not_kill_python(tmp_path: Path):
     import signal

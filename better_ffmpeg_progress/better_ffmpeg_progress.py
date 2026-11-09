@@ -245,27 +245,43 @@ class FfmpegProcess:
 
         return duration_secs
 
-    def _should_overwrite(self) -> bool:
+    def _overwrite_args(self) -> list[str]:
         """
-        Returns True if "-y" must be added to the command because the output file exists and may be
-        overwritten. Raises an FfmpegProcessError if it must not be overwritten.
+        Returns "-y" or "-n" to add to the command, or nothing if the command already contains one
+        of them. Raises an FfmpegCommandError if the output file exists and must not be overwritten.
+
+        FFmpeg must never ask whether to overwrite a file itself: it would wait for an answer on
+        standard input, which is a pipe that nothing is written to (or FFmpeg's input), so it
+        would never exit. This can happen for outputs other than the last argument.
         """
         user_args = self._command[1:]
-        if "-y" in user_args or self._writes_to_stdout or not self._output_filepath.exists():
-            return False
-        if "-n" in user_args or self._overwrite is False:
+        if "-y" in user_args or "-n" in user_args:
+            if "-n" in user_args and "-y" not in user_args and self._last_output_exists():
+                raise FfmpegCommandError(
+                    f"Output file {self._output_filepath} already exists and overwriting is "
+                    "disabled."
+                )
+            return []
+        if self._overwrite is True:
+            return ["-y"]
+        if not self._last_output_exists():
+            # Any other output that already exists makes FFmpeg fail instead of asking.
+            return ["-n"]
+        if self._overwrite is False:
             raise FfmpegCommandError(
                 f"Output file {self._output_filepath} already exists and overwriting is disabled."
             )
-        if self._overwrite is None:
-            if is_stdin_input(self._input_file):
-                # Prompting would read from standard input, which carries FFmpeg's input.
-                raise FfmpegCommandError(
-                    f"Output file {self._output_filepath} already exists. Pass "
-                    "overwrite=True or add -y to the command to overwrite it."
-                )
-            self._ask_to_overwrite()
-        return True
+        if is_stdin_input(self._input_file):
+            # Prompting would read from standard input, which carries FFmpeg's input.
+            raise FfmpegCommandError(
+                f"Output file {self._output_filepath} already exists. Pass "
+                "overwrite=True or add -y to the command to overwrite it."
+            )
+        self._ask_to_overwrite()
+        return ["-y"]
+
+    def _last_output_exists(self) -> bool:
+        return not self._writes_to_stdout and self._output_filepath.exists()
 
     def _ask_to_overwrite(self) -> None:
         """Raises an FfmpegProcessError unless the user agrees to overwrite the output file."""
@@ -287,10 +303,10 @@ class FfmpegProcess:
                 "FFmpeg process cancelled. Output file exists and overwrite declined."
             )
 
-    def _build_command(self, progress_url: str, overwrite: bool) -> list[str]:
+    def _build_command(self, progress_url: str, overwrite_args: list[str]) -> list[str]:
         return [
             self._command[0],
-            *(["-y"] if overwrite else []),
+            *overwrite_args,
             "-hide_banner",
             "-loglevel",
             self._log_level.value,
@@ -309,7 +325,7 @@ class FfmpegProcess:
                 log_file attributes are set when available.
             FfmpegProcessInterruptedError: If Ctrl+C is pressed. FFmpeg is stopped first.
         """
-        overwrite = self._should_overwrite()
+        overwrite_args = self._overwrite_args()
         self._duration_secs = self._get_output_duration()
 
         if isinstance(self._ffmpeg_log_file, Path):
@@ -344,7 +360,7 @@ class FfmpegProcess:
         # cleanly (see terminate_ffmpeg_process).
         stdin = None if is_stdin_input(self._input_file) else subprocess.PIPE
 
-        ffmpeg_command = self._build_command(progress_url, overwrite)
+        ffmpeg_command = self._build_command(progress_url, overwrite_args)
         if print_command:
             print(f"Executing: {shlex.join(ffmpeg_command)}", file=self._message_stream)
 
@@ -383,12 +399,19 @@ class FfmpegProcess:
             # pipe's buffer is full, FFmpeg blocks and never exits.
             with progress_stream, display:
                 size_mb = 0.0
+                reported_progress = False
                 for secs, size_mb in read_progress(progress_stream, self._duration_secs):
+                    reported_progress = True
                     display.update(secs, size_mb)
                     if self._progress_callback is not None:
                         self._progress_callback(secs, self._duration_secs, size_mb)
                 returncode = process.wait()
-                if returncode == 0:
+                # With -n, FFmpeg exits with code 0 without processing anything if an output
+                # file already exists. When FFmpeg does run, it always reports its progress.
+                refused_to_overwrite = (
+                    returncode == 0 and not reported_progress and "-n" in ffmpeg_command
+                )
+                if returncode == 0 and not refused_to_overwrite:
                     display.complete(size_mb)
         except KeyboardInterrupt as e:
             terminate_ffmpeg_process(process)
@@ -405,6 +428,15 @@ class FfmpegProcess:
             if process.stdin is not None:
                 with contextlib.suppress(OSError):
                     process.stdin.close()
+
+        if refused_to_overwrite:
+            raise FfmpegCommandError(
+                "FFmpeg did not run because an output file already exists. Pass overwrite=True "
+                "or add -y to the command to overwrite it. "
+                + build_failure_message(self._ffmpeg_log_file),
+                returncode=returncode,
+                log_file=self._ffmpeg_log_file,
+            )
 
         if returncode != 0:
             raise FfmpegProcessError(
